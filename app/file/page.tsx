@@ -29,6 +29,8 @@ function UploadFile() {
   const [isUploading, setIsUploading] = useState(false);
   const [uploadPercentage, setUploadPercentage] = useState(0);
 
+  const [processingToastShown, setProcessingToastShown] = useState(false);
+
   const handleBruteforceToggle = () => {
     setBruteforceSafe(!bruteforceSafe);
   };
@@ -126,8 +128,9 @@ function UploadFile() {
       const config = {
         onUploadProgress: function(progressEvent: ProgressEvent) {
           var percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
-          if (percentCompleted === 100) {
-            toast('Processing your file... This may take a while');
+          if (percentCompleted === 100 && !processingToastShown) {
+            setProcessingToastShown(true);
+              toast('Your file is being processed... This may take a while');
           }
           setUploadPercentage(percentCompleted);
         },

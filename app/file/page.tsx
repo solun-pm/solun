@@ -216,6 +216,7 @@ function UploadFile() {
                     id="files"
                     accept="*"
                     className="absolute opacity-0 h-64 w-full max-w-sm cursor-pointer"
+                    disabled={isUploading}
                     onChange={handleFileChange}
                   />
                 <div className="flex flex-col items-center text-center justify-center">

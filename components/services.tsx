@@ -82,7 +82,7 @@ const Services = () => {
       {
         icon: faEnvelope,
         title: 'Private Mail',
-        description: 'Get your own secure mailbox for confidential conversations. Enjoy the convenience of encrypted emails and keep your communication private.',
+        description: 'Get your own mailbox with a custom username with one of our domains - or use your own. Send and receive emails from anywhere.',
         buttonText: 'Get Started',
         buttonLink: process.env.NEXT_PUBLIC_AUTH_DOMAIN+'/signup',
         additionalDetails: (
@@ -91,6 +91,7 @@ const Services = () => {
             <li>Receive and send emails from anywhere.</li>
             <li>1GB of storage space.</li>
             <li>Send up to 100 messages per day.</li>
+            <li>Manage your own domain with Solun.</li>
           </div>
         ),
       },

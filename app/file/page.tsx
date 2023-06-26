@@ -130,7 +130,8 @@ function UploadFile() {
             toast('Processing your file... This may take a while');
           }
           setUploadPercentage(percentCompleted);
-        }
+        },
+        timeout: 24 * 60 * 60 * 1000, // 24 hours
       };
       
       try {

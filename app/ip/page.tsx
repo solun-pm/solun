@@ -16,10 +16,10 @@ const ipInformations = () => {
   const [ipData, setIpData] = useState(null) as any;
 
   useEffect(() => {
-    fetch('http://ip-api.com/json/')
+    fetch('https://ipapi.co/json/')
       .then(response => response.json())
       .then(data => {
-        if (data.status === 'success') {
+        if (data) {
           setIpData(data);
         } else {
           toast.error('Error while fetching IP informations');
@@ -41,24 +41,27 @@ return (
         <div className="text-center mb-6">
           <h2 className="text-2xl first-line:text-white">
             IP Address: <br />
-            <span className="text-4xl text-blue-600 hover:text-blue-700 transition-all font-semibold">{ipData?.query || <LoadingPlaceholder />}</span>
+            <span className="text-4xl text-blue-600 hover:text-blue-700 transition-all font-semibold">{ipData?.ip || <LoadingPlaceholder />}</span>
           </h2>
+          <h4 className="text-lg text-gray-400">
+            Network: <br />
+            <span className="text-2xl text-gray-500">{ipData?.network || <LoadingPlaceholder />}</span>
+          </h4>
         </div>
         <div className="text-white grid md:grid-cols-2 gap-4">
           <div>
-            <p><strong>Country:</strong> {ipData?.country || <LoadingPlaceholder />} ({ipData?.countryCode || <LoadingPlaceholder />})</p>
-            <p><strong>Region:</strong> {ipData?.regionName || <LoadingPlaceholder />} ({ipData?.region || <LoadingPlaceholder />})</p>
-            <p><strong>City:</strong> {ipData?.city || <LoadingPlaceholder />} {ipData?.zip || <LoadingPlaceholder />}</p>
+            <p><strong>Country:</strong> {ipData?.country_name || <LoadingPlaceholder />} ({ipData?.country_code || <LoadingPlaceholder />})</p>
+            <p><strong>Region:</strong> {ipData?.region || <LoadingPlaceholder />}</p>
+            <p><strong>City:</strong> {ipData?.city || <LoadingPlaceholder />} {ipData?.postal || <LoadingPlaceholder />}</p>
           </div>
           <div>
-            <p><strong>Latitude:</strong> {ipData?.lat || <LoadingPlaceholder />}</p>
-            <p><strong>Longitude:</strong> {ipData?.lon || <LoadingPlaceholder />}</p>
+            <p><strong>Latitude:</strong> {ipData?.latitude || <LoadingPlaceholder />}</p>
+            <p><strong>Longitude:</strong> {ipData?.longitude || <LoadingPlaceholder />}</p>
             <p><strong>Timezone:</strong> {ipData?.timezone || <LoadingPlaceholder />}</p>
           </div>
           <div className="md:col-span-2">
-            <p><strong>ISP:</strong> {ipData?.isp || <LoadingPlaceholder />}</p>
             <p><strong>Organization:</strong> {ipData?.org || <LoadingPlaceholder />}</p>
-            <p><strong>AS:</strong> {ipData?.as || <LoadingPlaceholder />}</p>
+            <p><strong>ASN:</strong> {ipData?.asn || <LoadingPlaceholder />}</p>
           </div>
         </div>
       </div>

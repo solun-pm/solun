@@ -1,6 +1,6 @@
 /** @type {import("next").NextConfig} */
 const nextConfig = {
-    experimental: { appDir: true, serverComponentsExternalPackages: ["mongoose"], mdxRs: true, },
+    experimental: { serverComponentsExternalPackages: ["mongoose"], mdxRs: true, },
     webpack(config) {
         config.experiments = { ...config.experiments, topLevelAwait: true };
         return config;

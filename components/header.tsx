@@ -31,6 +31,8 @@ const Header = () => {
           </Link>
           <Link href="/file" className="text-gray-300 hover:text-white transition duration-200">Upload File
           </Link>
+          <Link href="/ip" className="text-gray-300 hover:text-white transition duration-200">IP Info
+          </Link>
         </div>
         <div className="hidden md:flex">
           <button onClick={goToLogin} className="border border-blue-500 hover:bg-blue-500 hover:text-white text-blue-500 font-semibold px-4 py-2 rounded-l transition duration-200 mr-2">
@@ -52,6 +54,8 @@ const Header = () => {
             <Link href="/msg" className="text-gray-300 hover:text-white transition duration-200 block" onClick={toggleMenu}>Encrypt Message
             </Link>
             <Link href="/file" className="text-gray-300 hover:text-white transition duration-200 block" onClick={toggleMenu}>Upload File
+            </Link>
+            <Link href="/ip" className="text-gray-300 hover:text-white transition duration-200 block" onClick={toggleMenu}>IP Info
             </Link>
             <button onClick={goToLogin} className="border border-blue-500 hover:bg-blue-500 hover:text-white text-blue-500 font-semibold px-4 py-2 rounded-l transition duration-200 mr-2">
               Sign In

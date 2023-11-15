@@ -86,81 +86,71 @@ function UploadFile() {
 
   const MAX_FILE_SIZE = 2.5 * 1024 * 1024 * 1024; // 2.5GB in bytes
 
-const handleFileChange = (event: any) => {
-  const file = event.target.files[0]; // assuming single file upload
-  if (file.size > MAX_FILE_SIZE) {
-    toast.error('File size exceeds the maximum limit of 2.5GB');
-    return;
-  }
-  setFiles([file]);
-};
+  const handleFileChange = (event: any) => {
+    const file = event.target.files[0]; // assuming single file upload
+    if (file.size > MAX_FILE_SIZE) {
+      toast.error('File size exceeds the maximum limit of 2.5GB');
+      return;
+    }
+    setFiles([file]);
+  };
   
-const handleSubmit = async (e: React.FormEvent) => {
-  e.preventDefault();
-  const target = e.target as typeof e.target & {
-    bruteforceSafe: { checked: boolean };
-    password: { value: string };
-    endToEndEncryption: { checked: boolean };
-    autoDeletion: { value: string };
+  
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const target = e.target as typeof e.target & {
+      bruteforceSafe: { checked: boolean };
+      password: { value: string };
+      endToEndEncryption: { checked: boolean };
+      autoDeletion: { value: string };
+    };
+
+    setIsUploading(true);
+
+    const bruteforceSafe = target.bruteforceSafe.checked;
+    const password = target.password.value;
+    const endToEndEncryption = target.endToEndEncryption.checked;
+
+    const passwordSet = password !== "";
+    const encrypted_password = passwordSet ? await hashPassword(password) : null;
+
+    if (files.length > 0) {
+      const formData = new FormData();
+      formData.append('file', files[0]);
+      formData.append('bruteforceSafe', bruteforceSafe.toString());
+      formData.append('password', encrypted_password);
+      formData.append('endToEndEncryption', endToEndEncryption.toString());
+      formData.append('autoDeletion', target.autoDeletion.value);
+
+      const config = {
+        onUploadProgress: function(progressEvent: ProgressEvent) {
+          var percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+          if (percentCompleted === 100) {
+            toast('Processing your file... This may take a while');
+          }
+          setUploadPercentage(percentCompleted);
+        }
+      };
+      
+      try {
+        // @ts-ignore Config is not assignable to type AxiosRequestConfig
+        const response = await axios.post(process.env.NEXT_PUBLIC_API_DOMAIN + '/file/upload', formData, config);
+        
+        const data = await response.data;
+        if (response.status === 200) {
+          setUploadLink(data.link);
+          setUploadCreated(true);
+        } else {
+          toast.error(data.message);
+        }
+      } catch (err) {
+        toast.error('There was an error uploading your file');
+      }
+    }
+    setIsUploading(false);
   };
 
-  setIsUploading(true);
-
-  const bruteforceSafe = target.bruteforceSafe.checked;
-  const password = target.password.value;
-  const endToEndEncryption = target.endToEndEncryption.checked;
-
-  const passwordSet = password !== "";
-  const encrypted_password = passwordSet ? await hashPassword(password) : null;
-
-  const chunkSize = 1024 * 1024 * 5; // 5 MB
-  const totalChunks = Math.ceil(files[0].size / chunkSize);
-
-  for (let i = 0; i < totalChunks; i++) {
-    const start = i * chunkSize;
-    const end = Math.min(start + chunkSize, files[0].size);
-    const chunk = files[0].slice(start, end);
-
-    const formData = new FormData();
-    formData.append('file', chunk);
-    formData.append('bruteforceSafe', bruteforceSafe.toString());
-    formData.append('password', encrypted_password);
-    formData.append('endToEndEncryption', endToEndEncryption.toString());
-    formData.append('autoDeletion', target.autoDeletion.value);
-    formData.append('chunkIndex', i.toString());
-    formData.append('totalChunks', totalChunks.toString());
-
-    const config: any = {
-      onUploadProgress: function (progressEvent: ProgressEvent) {
-        const chunkPercentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
-        const globalPercentCompleted = Math.round((start + progressEvent.loaded) * 100 / files[0].size);
-        
-        if (chunkPercentCompleted === 100 && globalPercentCompleted >= 100) {
-          toast('Processing your file... This may take a while');
-        }
-        setUploadPercentage(globalPercentCompleted);
-      }
-    };
-    
-    try {
-      const response = await axios.post(process.env.NEXT_PUBLIC_API_DOMAIN + '/file/upload/chunk', formData, config);
-      const data = await response.data;
-      
-      if (response.status !== 200) {
-        toast.error(data.message);
-        break;
-      }
-
-      setUploadLink(data.link);
-      setUploadCreated(true);
-      
-    } catch (err) {
-      toast.error('There was an error uploading your file');
-      break;
-    }
-  }
-  setIsUploading(false);
-};
 
   return (
     <>

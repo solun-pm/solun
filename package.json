@@ -1,6 +1,6 @@
 {
   "name": "solun",
-  "version": "0.3.11",
+  "version": "0.3.12",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -46,7 +46,7 @@
     "react-markdown": "^8.0.7",
     "remark-gfm": "^3.0.1",
     "solun-database-package": "^1.0.1",
-    "solun-general-package": "^1.0.13",
+    "solun-general-package": "^1.0.27",
     "solun-server-encryption-package": "^1.0.3",
     "tailwindcss": "3.3.2",
     "typescript": "5.0.4",

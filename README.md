@@ -140,6 +140,30 @@ App runs at **http://localhost:3000**.
 
 ---
 
+## Releasing
+
+Bump the version across all packages, create a commit and a Git tag, then push:
+
+```bash
+# Stable release
+pnpm release:patch   # 0.0.1 → 0.0.2
+pnpm release:minor   # 0.0.1 → 0.1.0
+pnpm release:major   # 0.0.1 → 1.0.0
+git push origin main --tags
+
+# Dev pre-release
+pnpm release:patch:dev   # 0.0.1 → 0.0.2-dev.1
+pnpm release:minor:dev   # 0.0.1 → 0.1.0-dev.1
+pnpm release:major:dev   # 0.0.1 → 1.0.0-dev.1
+git push origin dev --tags
+```
+
+Pushing a tag triggers the publish workflow which builds and pushes the Docker images to GHCR:
+- Stable tags → `ghcr.io/solun-pm/solun-api:x.y.z` + `:latest`
+- Dev tags → `ghcr.io/solun-pm/solun-api:x.y.z-dev.1` + `:dev`
+
+---
+
 ## License
 
 [MIT](./LICENSE)

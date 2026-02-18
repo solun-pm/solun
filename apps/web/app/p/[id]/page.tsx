@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import Link from "next/link";
 import type { PasteRecord } from "@solun/shared";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001";
@@ -34,6 +35,16 @@ export default async function QuickPastePage(props: { params: Promise<{ id: stri
           ) : (
             <span>No expiration</span>
           )}
+        </div>
+
+        <div className="border-t border-ink-700 pt-6">
+          <Link
+            href="/"
+            className="inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-tide-400 to-tide-600 px-5 py-2.5 text-sm font-medium text-white shadow-glow-sm transition hover:opacity-90"
+          >
+            <span>+</span>
+            Create new message
+          </Link>
         </div>
       </div>
     </main>

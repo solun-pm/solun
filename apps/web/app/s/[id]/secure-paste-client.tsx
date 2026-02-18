@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import type { PasteRecord } from "@solun/shared";
 import { decrypt, importKey } from "../../../lib/crypto";
 
@@ -105,12 +106,12 @@ export default function SecurePasteClient({ id }: { id: string }) {
       <div className="w-full max-w-3xl space-y-6 rounded-3xl border border-ink-700 bg-ink-800/70 p-8 shadow-glow backdrop-blur">
         <header className="space-y-2">
           <p className="text-xs uppercase tracking-[0.4em] text-tide-300/70">Solun · Secure</p>
-          <h1 className="text-3xl font-semibold text-ink-100">Secret {id}</h1>
+          <h1 className="text-3xl font-semibold text-ink-100">You received a secret</h1>
           <p className="text-ink-200">Decrypts locally in your browser. The server never sees the key.</p>
         </header>
 
         {state === "loading" ? (
-          <p className="text-sm text-ink-200">Loading and decrypting...</p>
+          <p className="text-sm text-ink-200">Decrypting...</p>
         ) : null}
 
         {state === "error" && error ? (
@@ -120,16 +121,14 @@ export default function SecurePasteClient({ id }: { id: string }) {
         ) : null}
 
         {awaitingConfirm ? (
-          <div className="space-y-4 rounded-2xl border border-ember-400/40 bg-ember-400/10 p-4 text-ember-300">
-            <p className="text-sm">
-              This secret is set to burn after reading. Reveal it only when you are ready.
-            </p>
+          <div className="flex flex-col items-start gap-4">
+            <p className="text-sm text-ink-200">This message will be gone after you read it.</p>
             <button
               type="button"
               onClick={handleReveal}
-              className="rounded-full border border-ember-400/60 px-4 py-2 text-xs uppercase tracking-[0.3em] text-ember-300 hover:bg-ember-400/10"
+              className="rounded-full bg-tide-500 px-6 py-3 text-sm font-semibold uppercase tracking-[0.35em] text-ink-900 transition hover:bg-tide-400"
             >
-              Reveal Secret
+              Decrypt
             </button>
           </div>
         ) : null}
@@ -143,15 +142,26 @@ export default function SecurePasteClient({ id }: { id: string }) {
           />
         ) : null}
 
-        <div className="flex flex-wrap items-center gap-3 text-xs text-ink-400">
-          <span>Mode: secure</span>
-          {burnAfterRead ? <span>Burns after read</span> : <span>Persistent</span>}
-          {expiresAt ? (
-            <span>Expires: {new Date(expiresAt).toLocaleString()}</span>
-          ) : (
-            <span>No expiration</span>
-          )}
-        </div>
+        {content && (
+          <div className="flex flex-wrap items-center gap-3 text-xs text-ink-400">
+            {burnAfterRead ? <span>This message has now been deleted.</span> : null}
+            {expiresAt ? (
+              <span>Expires: {new Date(expiresAt).toLocaleString()}</span>
+            ) : null}
+          </div>
+        )}
+
+        {(content || state === "error") && (
+          <div className="border-t border-ink-700 pt-6">
+            <Link
+              href="/"
+              className="inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-tide-400 to-tide-600 px-5 py-2.5 text-sm font-medium text-white shadow-glow-sm transition hover:opacity-90"
+            >
+              <span>+</span>
+              Create new message
+            </Link>
+          </div>
+        )}
       </div>
     </main>
   );

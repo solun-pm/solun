@@ -2,7 +2,7 @@
 
 import clsx from "clsx";
 import Image from "next/image";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { PasteMode, TtlSeconds } from "@solun/shared";
 import { MAX_PASTE_BYTES } from "@solun/shared";
 import { encrypt, exportKey, generateKey } from "../lib/crypto";
@@ -39,15 +39,23 @@ export default function HomePage() {
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<{ url: string; expiresAt: string | null } | null>(null);
   const [copied, setCopied] = useState(false);
+  const [linkToast, setLinkToast] = useState(false);
 
   const bytes = useMemo(() => getByteLength(content), [content]);
 
-  // Auto-dismiss toast after 2.5s
+  // Auto-dismiss copy toast after 2.5s
   useEffect(() => {
     if (!copied) return;
     const t = setTimeout(() => setCopied(false), 2500);
     return () => clearTimeout(t);
   }, [copied]);
+
+  // Auto-dismiss link created toast after 3s
+  useEffect(() => {
+    if (!linkToast) return;
+    const t = setTimeout(() => setLinkToast(false), 3000);
+    return () => clearTimeout(t);
+  }, [linkToast]);
 
   async function handleCreate() {
     setError(null);
@@ -76,7 +84,6 @@ export default function HomePage() {
         content: payloadContent,
         mode,
         ttl,
-        // For secure mode: "burn" TTL or explicit checkbox both set burnAfterRead
         burnAfterRead: mode === "secure" ? (ttl === "burn" || burnAfterRead) : false,
         iv
       };
@@ -105,6 +112,7 @@ export default function HomePage() {
         mode === "secure" && keyFragment ? `${base}${path}#key=${keyFragment}` : `${base}${path}`;
 
       setResult({ url, expiresAt: data.expiresAt ?? null });
+      setLinkToast(true);
     } catch (err) {
       setError("Failed to create paste.");
     } finally {
@@ -118,8 +126,14 @@ export default function HomePage() {
     setCopied(true);
   }
 
-  // Burn-after-read is always true for quick mode (server-enforced).
-  // For the UI: show it checked+disabled to make the behaviour transparent.
+  function handleModeChange(newMode: PasteMode) {
+    setMode(newMode);
+    setBurnAfterRead(false);
+    // Clear the link when switching modes, but keep the text
+    setResult(null);
+    setCopied(false);
+  }
+
   const burnChecked = mode === "quick" ? true : (ttl === "burn" || burnAfterRead);
   const burnDisabled = mode === "quick" || ttl === "burn";
   const burnHint =
@@ -139,6 +153,16 @@ export default function HomePage() {
         )}
       >
         Link copied to clipboard
+      </div>
+
+      {/* Link created toast */}
+      <div
+        className={clsx(
+          "pointer-events-none fixed bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-full border border-tide-400/30 bg-ink-800/90 px-5 py-2.5 text-sm text-tide-300 shadow-glow-sm backdrop-blur transition-all duration-300",
+          linkToast && !copied ? "translate-y-0 opacity-100" : "translate-y-3 opacity-0"
+        )}
+      >
+        ✓ Link created
       </div>
 
       <div className="w-full max-w-3xl space-y-6 rounded-3xl border border-ink-700 bg-ink-800/70 p-8 shadow-glow backdrop-blur">
@@ -173,10 +197,7 @@ export default function HomePage() {
               <button
                 key={option}
                 type="button"
-                onClick={() => {
-                  setMode(option);
-                  setBurnAfterRead(false);
-                }}
+                onClick={() => handleModeChange(option)}
                 className={clsx(
                   "relative z-10 w-20 rounded-full py-2 text-center font-medium transition-colors duration-300",
                   mode === option ? "text-ink-900" : "text-ink-200 hover:text-ink-100"
@@ -279,36 +300,44 @@ export default function HomePage() {
           </div>
         </section>
 
-        {result ? (
-          <section className="space-y-3 rounded-2xl border border-ink-700 bg-ink-900/60 p-4">
-            <p className="text-xs uppercase tracking-[0.35em] text-ink-200">Your link</p>
-            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-              <code
-                className="flex-1 break-all text-sm text-tide-300 blur-sm transition-all duration-200 hover:blur-none select-none hover:select-text cursor-pointer"
-                title="Hover to reveal"
-              >
-                {result.url}
-              </code>
-              <button
-                type="button"
-                onClick={handleCopy}
-                className={clsx(
-                  "shrink-0 rounded-full border px-4 py-2 text-xs uppercase tracking-[0.3em] transition",
-                  copied
-                    ? "border-tide-400/60 bg-tide-400/10 text-tide-300"
-                    : "border-tide-500/40 text-tide-300 hover:bg-tide-500/10"
-                )}
-              >
-                {copied ? "Copied!" : "Copy"}
-              </button>
-            </div>
-            {result.expiresAt ? (
-              <p className="text-xs text-ink-200/60">Expires: {new Date(result.expiresAt).toLocaleString()}</p>
-            ) : (
-              <p className="text-xs text-ink-200/60">No expiration</p>
-            )}
-          </section>
-        ) : null}
+        {/* Link result — smooth slide-in/out */}
+        <div
+          className={clsx(
+            "overflow-hidden transition-all duration-500 ease-in-out",
+            result ? "max-h-48 opacity-100" : "max-h-0 opacity-0"
+          )}
+        >
+          {result && (
+            <section className="space-y-3 rounded-2xl border border-ink-700 bg-ink-900/60 p-4">
+              <p className="text-xs uppercase tracking-[0.35em] text-ink-200">Your link</p>
+              <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                <code
+                  className="flex-1 break-all text-sm text-tide-300 blur-sm transition-all duration-200 hover:blur-none select-none hover:select-text cursor-pointer"
+                  title="Hover to reveal"
+                >
+                  {result.url}
+                </code>
+                <button
+                  type="button"
+                  onClick={handleCopy}
+                  className={clsx(
+                    "shrink-0 rounded-full border px-4 py-2 text-xs uppercase tracking-[0.3em] transition",
+                    copied
+                      ? "border-tide-400/60 bg-tide-400/10 text-tide-300"
+                      : "border-tide-500/40 text-tide-300 hover:bg-tide-500/10"
+                  )}
+                >
+                  {copied ? "Copied!" : "Copy"}
+                </button>
+              </div>
+              {result.expiresAt ? (
+                <p className="text-xs text-ink-200/60">Expires: {new Date(result.expiresAt).toLocaleString()}</p>
+              ) : (
+                <p className="text-xs text-ink-200/60">Burns after first read</p>
+              )}
+            </section>
+          )}
+        </div>
       </div>
     </main>
   );

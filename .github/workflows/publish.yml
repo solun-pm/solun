@@ -2,9 +2,9 @@ name: Publish Docker Images
 
 on:
   push:
-    branches:
-      - main
-      - dev
+    tags:
+      - 'v*.*.*'      # stable release → main images  (e.g. v1.2.3)
+      - 'v*.*.*-dev*' # dev pre-release → dev images  (e.g. v1.2.3-dev.1)
   workflow_dispatch:
 
 env:
@@ -22,14 +22,10 @@ jobs:
       matrix:
         include:
           - app: api
-            package: "@solun/api"
-            context: .
             dockerfile: apps/api/Dockerfile
             image: ghcr.io/${{ github.repository_owner }}/solun-api
             package_json: apps/api/package.json
           - app: web
-            package: "@solun/web"
-            context: .
             dockerfile: apps/web/Dockerfile
             image: ghcr.io/${{ github.repository_owner }}/solun-web
             package_json: apps/web/package.json
@@ -43,6 +39,15 @@ jobs:
         run: |
           VERSION=$(node -p "require('./${{ matrix.package_json }}').version")
           echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Determine channel (stable vs dev)
+        id: channel
+        run: |
+          if [[ "${{ github.ref_name }}" == *"-dev"* ]]; then
+            echo "stable=false" >> $GITHUB_OUTPUT
+          else
+            echo "stable=true" >> $GITHUB_OUTPUT
+          fi
 
       - name: Log in to the Container registry
         uses: docker/login-action@65b78e6e13532edd9afa3aa52ac7964289d1a9c1
@@ -58,8 +63,8 @@ jobs:
           images: ${{ matrix.image }}
           tags: |
             type=raw,value=${{ steps.version.outputs.version }}
-            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
-            type=raw,value=dev,enable=${{ github.ref == 'refs/heads/dev' }}
+            type=raw,value=latest,enable=${{ steps.channel.outputs.stable == 'true' }}
+            type=raw,value=dev,enable=${{ steps.channel.outputs.stable == 'false' }}
             type=sha,prefix=sha-
 
       - name: Set up Docker Buildx
@@ -68,11 +73,10 @@ jobs:
       - name: Build and push Docker image
         uses: docker/build-push-action@f2a1d5e99d037542a71f64918e516c093c6f3fc4
         with:
-          context: ${{ matrix.context }}
+          context: .
           file: ${{ matrix.dockerfile }}
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha,scope=${{ matrix.app }}
           cache-to: type=gha,mode=max,scope=${{ matrix.app }}
-

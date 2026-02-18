@@ -170,6 +170,23 @@ app.post("/api/paste", limiter, async (req, res) => {
   }
 });
 
+// HEAD /api/paste/:id — check existence without reading or deleting
+app.head("/api/paste/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const paste = await prisma.paste.findUnique({
+      where: { shortId: id },
+      select: { shortId: true, expiresAt: true }
+    });
+    if (!paste || isExpired(paste.expiresAt)) {
+      return res.status(404).end();
+    }
+    return res.status(200).end();
+  } catch {
+    return res.status(500).end();
+  }
+});
+
 app.get("/api/paste/:id", async (req, res) => {
   try {
     const { id } = req.params;

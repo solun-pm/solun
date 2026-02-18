@@ -1,0 +1,122 @@
+name: Publish Docker Images
+
+on:
+  push:
+    branches:
+      - main
+      - dev
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+  build-and-push:
+    name: Build & Push ${{ matrix.app }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    strategy:
+      matrix:
+        include:
+          - app: api
+            package: "@solun/api"
+            context: .
+            dockerfile: apps/api/Dockerfile
+            image: ghcr.io/${{ github.repository_owner }}/solun-api
+            package_json: apps/api/package.json
+          - app: web
+            package: "@solun/web"
+            context: .
+            dockerfile: apps/web/Dockerfile
+            image: ghcr.io/${{ github.repository_owner }}/solun-web
+            package_json: apps/web/package.json
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Read version from package.json
+        id: version
+        run: |
+          VERSION=$(node -p "require('./${{ matrix.package_json }}').version")
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Log in to the Container registry
+        uses: docker/login-action@65b78e6e13532edd9afa3aa52ac7964289d1a9c1
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata for Docker
+        id: meta
+        uses: docker/metadata-action@9ec57ed1fcdbf14dcef7dfbe97b2010124a938b7
+        with:
+          images: ${{ matrix.image }}
+          tags: |
+            type=raw,value=${{ steps.version.outputs.version }}
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
+            type=raw,value=dev,enable=${{ github.ref == 'refs/heads/dev' }}
+            type=sha,prefix=sha-
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@f2a1d5e99d037542a71f64918e516c093c6f3fc4
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=${{ matrix.app }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.app }}
+
+      - name: Setup Node.js for Discord notification
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Discord notification (main)
+        if: github.ref == 'refs/heads/main' && secrets.DISCORD_WEBHOOK != ''
+        run: |
+          VERSION=${{ steps.version.outputs.version }}
+          COMMIT_LINK="https://github.com/${{ github.repository }}/commit/${{ github.sha }}"
+          curl -X POST "${{ secrets.DISCORD_WEBHOOK }}" \
+            -H "Content-Type: application/json" \
+            -d '{
+              "embeds": [{
+                "title": "solun-${{ matrix.app }} '"$VERSION"' deployed to production",
+                "url": "https://solun.app",
+                "description": "[Changes]('"$COMMIT_LINK"')",
+                "fields": [
+                  { "name": "Image", "value": "'"${{ matrix.image }}:$VERSION"'", "inline": false },
+                  { "name": "Version", "value": "'"$VERSION"'", "inline": true }
+                ],
+                "color": 5592575
+              }]
+            }'
+
+      - name: Discord notification (dev)
+        if: github.ref == 'refs/heads/dev' && secrets.DISCORD_WEBHOOK != ''
+        run: |
+          VERSION=${{ steps.version.outputs.version }}
+          COMMIT_LINK="https://github.com/${{ github.repository }}/commit/${{ github.sha }}"
+          curl -X POST "${{ secrets.DISCORD_WEBHOOK }}" \
+            -H "Content-Type: application/json" \
+            -d '{
+              "embeds": [{
+                "title": "solun-${{ matrix.app }} '"$VERSION"' deployed to dev",
+                "url": "https://dev.solun.app",
+                "description": "[Changes]('"$COMMIT_LINK"')",
+                "fields": [
+                  { "name": "Image", "value": "'"${{ matrix.image }}:$VERSION"'", "inline": false },
+                  { "name": "Version", "value": "'"$VERSION"'", "inline": true }
+                ],
+                "color": 16753920
+              }]
+            }'

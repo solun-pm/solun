@@ -10,6 +10,6 @@ COPY apps/web ./apps/web
 
 RUN pnpm install --frozen-lockfile
 RUN pnpm --filter @solun/shared build
-RUN pnpm --filter @solun/web build
 
-CMD ["pnpm", "--filter", "@solun/web", "start"]
+# next build runs at container start so NEXT_PUBLIC_* env vars are available
+CMD ["sh", "-c", "pnpm --filter @solun/web build && pnpm --filter @solun/web start"]

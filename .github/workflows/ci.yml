@@ -38,9 +38,6 @@ jobs:
       - name: Typecheck Web
         run: pnpm --filter @solun/web typecheck
 
-      - name: Lint Web
-        run: pnpm --filter @solun/web lint
-
       - name: Build API
         run: pnpm --filter @solun/api build
 

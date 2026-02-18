@@ -1,0 +1,11 @@
+.git
+.gitignore
+.turbo
+.next
+coverage
+dist
+node_modules
+**/node_modules
+.env
+.env.*
+pnpm-debug.log

@@ -1,0 +1,28 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+body {
+  @apply bg-ink-900 text-ink-100;
+  background-image:
+    radial-gradient(900px 600px at 15% -5%, rgba(100, 218, 252, 0.13), transparent 60%),
+    radial-gradient(700px 500px at 85% 5%, rgba(59, 130, 246, 0.14), transparent 55%),
+    radial-gradient(600px 400px at 50% 100%, rgba(85, 170, 255, 0.07), transparent 70%),
+    linear-gradient(180deg, rgba(8, 13, 20, 0.9), rgba(8, 13, 20, 1));
+  min-height: 100vh;
+}
+
+textarea,
+input,
+select,
+button {
+  font-family: var(--font-display), sans-serif;
+}
+
+code {
+  font-family: var(--font-mono), monospace;
+}

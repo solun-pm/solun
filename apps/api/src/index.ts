@@ -16,7 +16,9 @@ const envSchema = z.object({
   DATABASE_URL: z.string().min(1),
   PORT: z.coerce.number().default(3001),
   FRONTEND_URL: z.string().url(),
-  ENCRYPTION_SECRET: z.string().min(32)
+  ENCRYPTION_SECRET: z.string().min(32),
+  // Optional comma-separated extra origins, e.g. "https://www.solun.pm,https://dev.solun.pm"
+  EXTRA_ORIGINS: z.string().optional()
 });
 
 const env = envSchema.parse({
@@ -59,9 +61,19 @@ const app = express();
 app.disable("x-powered-by");
 
 app.use(helmet());
+const allowedOrigins = [
+  env.FRONTEND_URL,
+  ...(env.EXTRA_ORIGINS ? env.EXTRA_ORIGINS.split(",").map((o) => o.trim()) : [])
+];
+
 app.use(
   cors({
-    origin: env.FRONTEND_URL
+    origin: (origin, callback) => {
+      // Allow requests with no origin (e.g. server-to-server, curl)
+      if (!origin) return callback(null, true);
+      if (allowedOrigins.includes(origin)) return callback(null, true);
+      callback(new Error(`CORS: origin '${origin}' not allowed`));
+    }
   })
 );
 app.use(express.json({ limit: "512kb" }));
@@ -159,44 +171,54 @@ app.post("/api/paste", limiter, async (req, res) => {
 });
 
 app.get("/api/paste/:id", async (req, res) => {
-  const { id } = req.params;
-  const paste = await prisma.paste.findUnique({
-    where: { shortId: id }
-  });
+  try {
+    const { id } = req.params;
+    const paste = await prisma.paste.findUnique({
+      where: { shortId: id }
+    });
 
-  if (!paste) {
-    return res.status(404).json({ error: "Not found." });
+    if (!paste) {
+      return res.status(404).json({ error: "Not found." });
+    }
+
+    if (isExpired(paste.expiresAt)) {
+      await prisma.paste.delete({ where: { shortId: id } }).catch(() => undefined);
+      return res.status(404).json({ error: "Not found." });
+    }
+
+    if (paste.burnAfterRead) {
+      await prisma.paste.delete({ where: { shortId: id } }).catch(() => undefined);
+    }
+
+    // Quick pastes are stored encrypted at rest; decrypt before sending to client.
+    // Secure pastes are E2E encrypted by the client; return ciphertext as-is.
+    let content: string;
+    try {
+      content = paste.mode === "quick" ? decryptContent(paste.content) : paste.content;
+    } catch (err) {
+      console.error("Decryption failed for paste", id, err instanceof Error ? err.message : err);
+      return res.status(500).json({ error: "Failed to decrypt paste. The server key may have changed." });
+    }
+
+    const response = {
+      id: paste.shortId,
+      content,
+      mode: paste.mode,
+      iv: paste.iv ?? null,
+      expiresAt: paste.expiresAt ? paste.expiresAt.toISOString() : null,
+      burnAfterRead: paste.burnAfterRead
+    };
+
+    const validated = pasteRecordSchema.safeParse(response);
+    if (!validated.success) {
+      return res.status(500).json({ error: "Invalid paste record." });
+    }
+
+    return res.json(validated.data);
+  } catch (error) {
+    console.error("Get paste failed:", error instanceof Error ? error.message : "unknown error");
+    return res.status(500).json({ error: "Failed to retrieve paste." });
   }
-
-  if (isExpired(paste.expiresAt)) {
-    await prisma.paste.delete({ where: { shortId: id } }).catch(() => undefined);
-    return res.status(404).json({ error: "Not found." });
-  }
-
-  if (paste.burnAfterRead) {
-    await prisma.paste.delete({ where: { shortId: id } }).catch(() => undefined);
-  }
-
-  // Quick pastes are stored encrypted at rest; decrypt before sending to client.
-  // Secure pastes are E2E encrypted by the client; return ciphertext as-is.
-  const content =
-    paste.mode === "quick" ? decryptContent(paste.content) : paste.content;
-
-  const response = {
-    id: paste.shortId,
-    content,
-    mode: paste.mode,
-    iv: paste.iv ?? null,
-    expiresAt: paste.expiresAt ? paste.expiresAt.toISOString() : null,
-    burnAfterRead: paste.burnAfterRead
-  };
-
-  const validated = pasteRecordSchema.safeParse(response);
-  if (!validated.success) {
-    return res.status(500).json({ error: "Invalid paste record." });
-  }
-
-  return res.json(validated.data);
 });
 
 app.delete("/api/paste/:id", async (req, res) => {

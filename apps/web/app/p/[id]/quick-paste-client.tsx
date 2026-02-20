@@ -67,7 +67,7 @@ export default function QuickPasteClient({ id }: { id: string }) {
   }
 
   return (
-    <main className="flex min-h-screen items-center justify-center px-4 py-10">
+    <main className="flex min-h-screen items-start justify-center px-4 pt-10 pb-6">
       <div className="w-full max-w-3xl space-y-6 rounded-3xl border border-ink-700 bg-ink-800/70 p-8 shadow-glow backdrop-blur">
         <header className="space-y-2">
           <p className="text-xs uppercase tracking-[0.4em] text-tide-300/70">Solun · Quick</p>

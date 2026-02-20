@@ -37,17 +37,58 @@ export function middleware(request: NextRequest) {
   // Content-Security-Policy
   // Note: Next.js requires 'unsafe-inline' and 'unsafe-eval' for development
   // Consider tightening this in production with nonces
-  const connectSources = ["'self'"];
+  const connectSources = new Set<string>(["'self'"]);
   const apiUrl = process.env.NEXT_PUBLIC_API_URL;
   if (apiUrl) {
     try {
-      connectSources.push(new URL(apiUrl).origin);
+      connectSources.add(new URL(apiUrl).origin);
     } catch {
       // Ignore invalid API URL to avoid breaking CSP generation
     }
   } else if (process.env.NODE_ENV !== "production") {
-    connectSources.push("http://localhost:3001");
+    connectSources.add("http://localhost:3001");
   }
+
+  const extraConnect = process.env.NEXT_PUBLIC_CONNECT_ORIGINS;
+  if (extraConnect) {
+    extraConnect
+      .split(",")
+      .map((value) => value.trim())
+      .filter(Boolean)
+      .forEach((value) => {
+        if (value.includes("*")) {
+          connectSources.add(value);
+          return;
+        }
+        try {
+          connectSources.add(new URL(value).origin);
+        } catch {
+          connectSources.add(value);
+        }
+      });
+  }
+
+  const r2Endpoint = process.env.NEXT_PUBLIC_R2_ENDPOINT;
+  if (r2Endpoint) {
+    try {
+      connectSources.add(new URL(r2Endpoint).origin);
+    } catch {
+      // ignore malformed value
+    }
+  }
+
+  const r2Public = process.env.NEXT_PUBLIC_R2_PUBLIC_URL ?? process.env.NEXT_PUBLIC_R2_PUBLIC_ORIGIN;
+  if (r2Public) {
+    try {
+      connectSources.add(new URL(r2Public).origin);
+    } catch {
+      connectSources.add(r2Public);
+    }
+  }
+
+  // Allow Cloudflare R2 endpoints for metadata/file fetches.
+  connectSources.add("https://*.r2.cloudflarestorage.com");
+  connectSources.add("https://*.eu.r2.cloudflarestorage.com");
 
   const csp = [
     "default-src 'self'",
@@ -55,7 +96,7 @@ export function middleware(request: NextRequest) {
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data: https:",
     "font-src 'self' data:",
-    `connect-src ${connectSources.join(" ")}`,
+    `connect-src ${Array.from(connectSources).join(" ")}`,
     "frame-ancestors 'none'"
   ].join("; ");
 

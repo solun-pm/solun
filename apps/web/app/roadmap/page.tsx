@@ -2,7 +2,16 @@ import Link from "next/link";
 
 export const metadata = {
   title: "Roadmap",
-  description: "What Solun is building next: privacy-first sharing with clear, near-term priorities."
+  description: "What Solun is building next: privacy-first sharing with clear, near-term priorities.",
+  alternates: {
+    canonical: "https://solun.pm/roadmap"
+  },
+  openGraph: {
+    title: "Roadmap · Solun",
+    description: "What Solun is building next: privacy-first sharing with clear, near-term priorities.",
+    url: "https://solun.pm/roadmap",
+    type: "website"
+  }
 };
 
 const roadmap = {

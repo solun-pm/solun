@@ -14,7 +14,7 @@ export default function QuickPasteClient({ id }: { id: string }) {
   const [error, setError] = useState<string | null>(null);
   const checkedRef = useRef(false);
 
-  // On mount: HEAD check — does the message exist? Don't read or delete it yet.
+  // On mount: HEAD check – does the message exist? Don't read or delete it yet.
   useEffect(() => {
     if (checkedRef.current) return;
     checkedRef.current = true;

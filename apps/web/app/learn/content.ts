@@ -10,6 +10,8 @@ export type LearnArticle = {
   intro: string[];
   sections: LearnSection[];
   related: string[];
+  datePublished: string; // ISO 8601 format
+  dateModified: string; // ISO 8601 format
 };
 
 export const learnArticles: LearnArticle[] = [
@@ -51,7 +53,9 @@ export const learnArticles: LearnArticle[] = [
         ]
       }
     ],
-    related: ["end-to-end-encryption-basics", "burn-after-read-and-expiration", "how-to-share-secrets", "threat-model"]
+    related: ["end-to-end-encryption-basics", "burn-after-read-and-expiration", "how-to-share-secrets", "threat-model"],
+    datePublished: "2024-06-15T00:00:00Z",
+    dateModified: "2026-02-20T00:00:00Z"
   },
   {
     slug: "end-to-end-encryption-basics",
@@ -91,7 +95,9 @@ export const learnArticles: LearnArticle[] = [
         ]
       }
     ],
-    related: ["secure-paste-sharing", "secure-file-sharing", "private-link-sharing", "threat-model"]
+    related: ["secure-paste-sharing", "secure-file-sharing", "private-link-sharing", "threat-model"],
+    datePublished: "2024-06-15T00:00:00Z",
+    dateModified: "2026-02-20T00:00:00Z"
   },
   {
     slug: "burn-after-read-and-expiration",
@@ -131,7 +137,9 @@ export const learnArticles: LearnArticle[] = [
         ]
       }
     ],
-    related: ["secure-paste-sharing", "secure-file-sharing", "private-link-sharing", "compliance-and-retention"]
+    related: ["secure-paste-sharing", "secure-file-sharing", "private-link-sharing", "compliance-and-retention"],
+    datePublished: "2024-06-15T00:00:00Z",
+    dateModified: "2026-02-20T00:00:00Z"
   },
   {
     slug: "secure-file-sharing",
@@ -171,7 +179,9 @@ export const learnArticles: LearnArticle[] = [
         ]
       }
     ],
-    related: ["end-to-end-encryption-basics", "troubleshooting-downloads", "burn-after-read-and-expiration", "private-link-sharing"]
+    related: ["end-to-end-encryption-basics", "troubleshooting-downloads", "burn-after-read-and-expiration", "private-link-sharing"],
+    datePublished: "2024-06-15T00:00:00Z",
+    dateModified: "2026-02-20T00:00:00Z"
   },
   {
     slug: "threat-model",
@@ -211,7 +221,9 @@ export const learnArticles: LearnArticle[] = [
         ]
       }
     ],
-    related: ["secure-paste-sharing", "end-to-end-encryption-basics", "private-link-sharing", "compliance-and-retention"]
+    related: ["secure-paste-sharing", "end-to-end-encryption-basics", "private-link-sharing", "compliance-and-retention"],
+    datePublished: "2024-06-15T00:00:00Z",
+    dateModified: "2026-02-20T00:00:00Z"
   },
   {
     slug: "private-link-sharing",
@@ -251,7 +263,9 @@ export const learnArticles: LearnArticle[] = [
         ]
       }
     ],
-    related: ["secure-paste-sharing", "burn-after-read-and-expiration", "how-to-share-secrets", "troubleshooting-downloads"]
+    related: ["secure-paste-sharing", "burn-after-read-and-expiration", "how-to-share-secrets", "troubleshooting-downloads"],
+    datePublished: "2024-06-15T00:00:00Z",
+    dateModified: "2026-02-20T00:00:00Z"
   },
   {
     slug: "compliance-and-retention",
@@ -291,7 +305,9 @@ export const learnArticles: LearnArticle[] = [
         ]
       }
     ],
-    related: ["burn-after-read-and-expiration", "secure-file-sharing", "threat-model", "no-tracking-privacy"]
+    related: ["burn-after-read-and-expiration", "secure-file-sharing", "threat-model", "no-tracking-privacy"],
+    datePublished: "2024-06-15T00:00:00Z",
+    dateModified: "2026-02-20T00:00:00Z"
   },
   {
     slug: "pastebin-alternative",
@@ -331,7 +347,9 @@ export const learnArticles: LearnArticle[] = [
         ]
       }
     ],
-    related: ["secure-paste-sharing", "no-tracking-privacy", "end-to-end-encryption-basics", "compliance-and-retention"]
+    related: ["secure-paste-sharing", "no-tracking-privacy", "end-to-end-encryption-basics", "compliance-and-retention"],
+    datePublished: "2024-06-15T00:00:00Z",
+    dateModified: "2026-02-20T00:00:00Z"
   },
   {
     slug: "sharing-from-teams",
@@ -371,7 +389,9 @@ export const learnArticles: LearnArticle[] = [
         ]
       }
     ],
-    related: ["how-to-share-secrets", "secure-paste-sharing", "compliance-and-retention", "private-link-sharing"]
+    related: ["how-to-share-secrets", "secure-paste-sharing", "compliance-and-retention", "private-link-sharing"],
+    datePublished: "2024-06-15T00:00:00Z",
+    dateModified: "2026-02-20T00:00:00Z"
   },
   {
     slug: "how-to-share-secrets",
@@ -411,7 +431,9 @@ export const learnArticles: LearnArticle[] = [
         ]
       }
     ],
-    related: ["secure-paste-sharing", "burn-after-read-and-expiration", "private-link-sharing", "sharing-from-teams"]
+    related: ["secure-paste-sharing", "burn-after-read-and-expiration", "private-link-sharing", "sharing-from-teams"],
+    datePublished: "2024-06-15T00:00:00Z",
+    dateModified: "2026-02-20T00:00:00Z"
   },
   {
     slug: "troubleshooting-downloads",
@@ -451,7 +473,9 @@ export const learnArticles: LearnArticle[] = [
         ]
       }
     ],
-    related: ["secure-file-sharing", "burn-after-read-and-expiration", "private-link-sharing", "secure-paste-sharing"]
+    related: ["secure-file-sharing", "burn-after-read-and-expiration", "private-link-sharing", "secure-paste-sharing"],
+    datePublished: "2024-06-15T00:00:00Z",
+    dateModified: "2026-02-20T00:00:00Z"
   },
   {
     slug: "no-tracking-privacy",
@@ -491,7 +515,9 @@ export const learnArticles: LearnArticle[] = [
         ]
       }
     ],
-    related: ["secure-paste-sharing", "end-to-end-encryption-basics", "compliance-and-retention", "pastebin-alternative"]
+    related: ["secure-paste-sharing", "end-to-end-encryption-basics", "compliance-and-retention", "pastebin-alternative"],
+    datePublished: "2024-06-15T00:00:00Z",
+    dateModified: "2026-02-20T00:00:00Z"
   }
 ];
 

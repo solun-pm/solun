@@ -4,6 +4,30 @@ import clsx from "clsx";
 
 export type ShareKind = "text" | "files";
 
+const tabs: { kind: ShareKind; label: string; description: string; icon: React.ReactNode }[] = [
+  {
+    kind: "text",
+    label: "Message",
+    description: "Send text or code",
+    icon: (
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+      </svg>
+    )
+  },
+  {
+    kind: "files",
+    label: "File",
+    description: "Upload any file",
+    icon: (
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+        <polyline points="14 2 14 8 20 8"/>
+      </svg>
+    )
+  }
+];
+
 export default function ShareSwitch({
   value,
   onChange
@@ -11,43 +35,34 @@ export default function ShareSwitch({
   value: ShareKind;
   onChange: (next: ShareKind) => void;
 }) {
-  const indicatorStyle = {
-    width: value === "text" ? 96 : 88,
-    transform: value === "text" ? "translateX(0px)" : "translateX(96px)"
-  };
-
   return (
-    <div className="flex items-center gap-3">
-      <span className="text-[10px] uppercase tracking-[0.35em] text-ink-200/70">Share</span>
-      <div className="relative inline-flex rounded-2xl border border-ink-700 bg-ink-900/60 p-1 text-sm">
-        <span
-          aria-hidden="true"
-          className="absolute inset-y-1 left-1 rounded-xl bg-tide-500 transition-all duration-300 ease-[cubic-bezier(0.2,0.8,0.2,1)]"
-          style={indicatorStyle}
-        />
-        <button
-          type="button"
-          onClick={() => onChange("text")}
-          className={clsx(
-            "relative z-10 rounded-xl px-4 py-2 font-semibold transition-colors duration-300",
-            value === "text" ? "text-ink-900" : "text-ink-200 hover:text-ink-100",
-            "w-[96px] text-center"
-          )}
-        >
-          Text
-        </button>
-        <button
-          type="button"
-          onClick={() => onChange("files")}
-          className={clsx(
-            "relative z-10 rounded-xl px-4 py-2 font-semibold transition-colors duration-300",
-            value === "files" ? "text-ink-900" : "text-ink-200 hover:text-ink-100",
-            "w-[88px] text-center"
-          )}
-        >
-          Files
-        </button>
-      </div>
+    <div className="grid grid-cols-2 gap-2" role="tablist" aria-label="Share type">
+      {tabs.map((tab) => {
+        const active = value === tab.kind;
+        return (
+          <button
+            key={tab.kind}
+            type="button"
+            role="tab"
+            aria-selected={active}
+            onClick={() => onChange(tab.kind)}
+            className={clsx(
+              "flex items-center gap-3 rounded-2xl border px-5 py-3.5 text-left transition-all duration-200",
+              active
+                ? "border-tide-500/60 bg-tide-500/10 text-tide-200"
+                : "border-ink-700 bg-ink-900/40 text-ink-200 hover:border-ink-600 hover:text-ink-100"
+            )}
+          >
+            <span className={clsx("shrink-0 transition-colors", active ? "text-tide-400" : "text-ink-400")}>
+              {tab.icon}
+            </span>
+            <span>
+              <span className="block text-sm font-semibold leading-tight">{tab.label}</span>
+              <span className="block text-xs text-ink-400 leading-tight mt-0.5">{tab.description}</span>
+            </span>
+          </button>
+        );
+      })}
     </div>
   );
 }

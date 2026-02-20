@@ -3,7 +3,7 @@
 import clsx from "clsx";
 import Image from "next/image";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import type { FileExpiration, FileMetadata, FileMode, PasteMode, TtlSeconds } from "@solun/shared";
+import type { FileExpiration, FileMetadata, FileMode, PasteMode } from "@solun/shared";
 import { FILE_CHUNK_SIZE, MAX_FILE_BYTES, MAX_PASTE_BYTES } from "@solun/shared";
 import { encrypt, exportKey, generateKey, importKey } from "../lib/crypto";
 import { getByteLength, validateCreatePayload } from "../lib/validation";
@@ -12,14 +12,6 @@ import { useUploadProgress } from "../lib/hooks/useUploadProgress";
 import ShareSwitch, { type ShareKind } from "./components/share-switch";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001";
-
-const ttlOptions: { label: string; value: TtlSeconds }[] = [
-  { label: "After first read", value: "burn" },
-  { label: "1 hour", value: 3600 },
-  { label: "24 hours", value: 86400 },
-  { label: "7 days", value: 604800 },
-  { label: "Never", value: null }
-];
 
 const fileExpirationOptions: { label: string; value: FileExpiration }[] = [
   { label: "1 hour", value: "1h" },
@@ -92,16 +84,71 @@ function clearResumeState(file: File) {
   sessionStorage.removeItem(`solun:upload:${fingerprintFile(file)}`);
 }
 
-function ttlToSelectValue(ttl: TtlSeconds): string {
-  if (ttl === null) return "never";
-  if (ttl === "burn") return "burn";
-  return String(ttl);
-}
+function DropZone({ file, onFile }: { file: File | null; onFile: (f: File) => void }) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [dragging, setDragging] = useState(false);
 
-function selectValueToTtl(value: string): TtlSeconds {
-  if (value === "never") return null;
-  if (value === "burn") return "burn";
-  return Number(value) as TtlSeconds;
+  function handleDrop(event: React.DragEvent) {
+    event.preventDefault();
+    setDragging(false);
+    const dropped = event.dataTransfer.files[0];
+    if (dropped) onFile(dropped);
+  }
+
+  function handleChange(event: React.ChangeEvent<HTMLInputElement>) {
+    const next = event.target.files?.[0];
+    if (next) onFile(next);
+  }
+
+  return (
+    <div
+      role="button"
+      tabIndex={0}
+      aria-label="File drop zone"
+      onClick={() => inputRef.current?.click()}
+      onKeyDown={(e) => e.key === "Enter" && inputRef.current?.click()}
+      onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
+      onDragLeave={() => setDragging(false)}
+      onDrop={handleDrop}
+      className={clsx(
+        "flex h-36 w-full cursor-pointer flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed transition-all duration-200",
+        dragging
+          ? "border-tide-400 bg-tide-400/5 scale-[1.01]"
+          : file
+            ? "border-tide-500/40 bg-ink-900/40"
+            : "border-ink-700 bg-ink-900/40 hover:border-ink-600 hover:bg-ink-900/60"
+      )}
+    >
+      <input
+        ref={inputRef}
+        type="file"
+        className="hidden"
+        onChange={handleChange}
+      />
+      {file ? (
+        <>
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-tide-400" aria-hidden="true">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+            <polyline points="14 2 14 8 20 8"/>
+          </svg>
+          <span className="max-w-[90%] truncate text-sm font-medium text-ink-100">{file.name}</span>
+          <span className={clsx("text-xs", file.size > MAX_FILE_BYTES ? "text-ember-300" : "text-ink-400")}>
+            {formatBytes(file.size)}{file.size > MAX_FILE_BYTES ? " – exceeds 500 MB limit" : ""}
+          </span>
+        </>
+      ) : (
+        <>
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-ink-500" aria-hidden="true">
+            <polyline points="16 16 12 12 8 16"/>
+            <line x1="12" y1="12" x2="12" y2="21"/>
+            <path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/>
+          </svg>
+          <span className="text-sm text-ink-400">Drop a file here or <span className="text-tide-300">browse</span></span>
+          <span className="text-xs text-ink-600">up to 500 MB</span>
+        </>
+      )}
+    </div>
+  );
 }
 
 export default function HomePage() {
@@ -109,8 +156,6 @@ export default function HomePage() {
 
   const [mode, setMode] = useState<PasteMode>("quick");
   const [content, setContent] = useState("");
-  const [ttl, setTtl] = useState<TtlSeconds>("burn");
-  const [burnAfterRead, setBurnAfterRead] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<{ url: string; expiresAt: string | null } | null>(null);
@@ -119,7 +164,6 @@ export default function HomePage() {
 
   const [fileMode, setFileMode] = useState<FileMode>("quick");
   const [fileExpiresIn, setFileExpiresIn] = useState<FileExpiration>("24h");
-  const [fileBurnAfterRead, setFileBurnAfterRead] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const [fileError, setFileError] = useState<string | null>(null);
   const [fileResult, setFileResult] = useState<{ url: string; expiresAt: string } | null>(null);
@@ -151,7 +195,41 @@ export default function HomePage() {
       "@type": "Organization",
       name: "Solun",
       url: "https://solun.pm",
+      logo: "https://solun.pm/logo.svg",
       sameAs: ["https://github.com/solun-pm/solun"]
+    },
+    {
+      "@context": "https://schema.org",
+      "@type": "SoftwareApplication",
+      name: "Solun",
+      applicationCategory: "SecurityApplication",
+      operatingSystem: "Web",
+      offers: {
+        "@type": "Offer",
+        price: "0",
+        priceCurrency: "USD"
+      },
+      description:
+        "Privacy-first paste and file sharing with end-to-end encryption, burn-after-read, and strict expirations. Share sensitive text and files securely with automatic deletion and client-side encryption.",
+      url: "https://solun.pm",
+      screenshot: "https://solun.pm/logo.svg",
+      softwareVersion: "1.0",
+      publisher: {
+        "@type": "Organization",
+        name: "Solun",
+        logo: {
+          "@type": "ImageObject",
+          url: "https://solun.pm/logo.svg"
+        }
+      },
+      featureList: [
+        "End-to-end encryption",
+        "Burn-after-read",
+        "Automatic expiration",
+        "Secure file sharing up to 500MB",
+        "No tracking or analytics",
+        "Open source"
+      ]
     }
   ];
 
@@ -196,7 +274,6 @@ export default function HomePage() {
     return () => observer.disconnect();
   }, [shareKind]);
 
-  // Auto-dismiss copy toast after 2.5s
   useEffect(() => {
     if (!copied) return;
     const t = setTimeout(() => setCopied(false), 2500);
@@ -215,7 +292,6 @@ export default function HomePage() {
     return () => clearTimeout(t);
   }, [fileLinkToast]);
 
-  // Auto-dismiss link created toast after 3s
   useEffect(() => {
     if (!linkToast) return;
     const t = setTimeout(() => setLinkToast(false), 3000);
@@ -248,8 +324,8 @@ export default function HomePage() {
       const payload = {
         content: payloadContent,
         mode,
-        ttl,
-        burnAfterRead: mode === "secure" ? (ttl === "burn" || burnAfterRead) : false,
+        ttl: "burn" as const,
+        burnAfterRead: true,
         iv
       };
 
@@ -293,8 +369,6 @@ export default function HomePage() {
 
   function handleModeChange(newMode: PasteMode) {
     setMode(newMode);
-    setBurnAfterRead(false);
-    // Clear the link when switching modes, but keep the text
     setResult(null);
     setCopied(false);
   }
@@ -369,7 +443,7 @@ export default function HomePage() {
           sizeBytes: selected.size,
           contentType: selected.type || "application/octet-stream",
           originalName: selected.name,
-          burnAfterRead: fileBurnAfterRead
+          burnAfterRead: true
         })
       });
 
@@ -593,15 +667,6 @@ export default function HomePage() {
     }
   }
 
-  const burnChecked = mode === "quick" ? true : (ttl === "burn" || burnAfterRead);
-  const burnDisabled = mode === "quick" || ttl === "burn";
-  const burnHint =
-    mode === "quick"
-      ? "(always on for quick)"
-      : ttl === "burn"
-        ? "(set by expiration)"
-        : null;
-
   return (
     <main className="flex min-h-screen items-center justify-center px-4 py-10">
       <div
@@ -621,7 +686,7 @@ export default function HomePage() {
       >
         ✓ Link created
       </div>
-      {/* Copy toast */}
+
       <div
         className={clsx(
           "pointer-events-none fixed bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-full border border-tide-400/30 bg-ink-800/90 px-5 py-2.5 text-sm text-tide-300 shadow-glow-sm backdrop-blur transition-all duration-300",
@@ -631,7 +696,6 @@ export default function HomePage() {
         Link copied to clipboard
       </div>
 
-      {/* Link created toast */}
       <div
         className={clsx(
           "pointer-events-none fixed bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-full border border-tide-400/30 bg-ink-800/90 px-5 py-2.5 text-sm text-tide-300 shadow-glow-sm backdrop-blur transition-all duration-300",
@@ -642,19 +706,6 @@ export default function HomePage() {
       </div>
 
       <div className="w-full max-w-3xl space-y-6 rounded-3xl border border-ink-700 bg-ink-800/70 p-8 shadow-glow backdrop-blur">
-        <nav className="flex flex-wrap items-center justify-between gap-3">
-          <ShareSwitch value={shareKind} onChange={setShareKind} />
-          <div className="flex items-center gap-2 text-xs text-ink-200/60">
-            <span>Encrypted sharing</span>
-            <span className="text-ink-500/60">•</span>
-            <a
-              href="/learn"
-              className="text-tide-300/80 transition hover:text-tide-200"
-            >
-              Learn
-            </a>
-          </div>
-        </nav>
         <header className="flex items-start gap-4">
           <Image
             src="/logo.svg"
@@ -667,10 +718,11 @@ export default function HomePage() {
           <div className="space-y-1.5">
             <h1 className="text-3xl font-semibold tracking-tight text-ink-100">Solun</h1>
             <p className="text-sm text-ink-200">
-              Quick mode keeps it fast. Secure mode encrypts in your browser — the server never sees the key.
+              Quick mode keeps it fast. Secure mode encrypts in your browser – the server never sees the key.
             </p>
           </div>
         </header>
+        <ShareSwitch value={shareKind} onChange={setShareKind} />
 
         <div
           className="relative transition-[height] duration-700 ease-[cubic-bezier(0.16,0.84,0.44,1)] will-change-[height]"
@@ -708,70 +760,20 @@ export default function HomePage() {
               ))}
             </div>
 
-            <div className="space-y-2">
+            <div className="relative">
               <textarea
                 value={content}
                 onChange={(event) => setContent(event.target.value)}
                 placeholder="Paste your text here..."
                 rows={10}
-                className="w-full resize-none rounded-2xl border border-ink-700 bg-ink-900/60 p-4 text-base text-ink-100 outline-none ring-1 ring-transparent focus:border-tide-400 focus:ring-tide-400/30 transition"
+                className="w-full resize-none rounded-2xl border border-ink-700 bg-ink-900/60 p-4 pb-8 text-base text-ink-100 outline-none ring-1 ring-transparent focus:border-tide-400 focus:ring-tide-400/30 transition"
               />
-              <div className="flex items-center justify-between text-xs text-ink-200">
-                <span>{bytes.toLocaleString()} bytes</span>
-                <span className={bytes > MAX_PASTE_BYTES ? "text-ember-300" : ""}>
+              <div className="pointer-events-none absolute bottom-3 left-4 right-4 flex items-center justify-between text-xs">
+                <span className="text-ink-600">{bytes.toLocaleString()} bytes</span>
+                <span className={bytes > MAX_PASTE_BYTES ? "text-ember-300" : "text-ink-600"}>
                   512 KB max
                 </span>
               </div>
-            </div>
-
-            <div className="grid gap-4 md:grid-cols-2">
-              <label className="space-y-2 text-sm text-ink-200">
-                <span className="block text-xs uppercase tracking-[0.3em] text-ink-200">
-                  Expiration
-                </span>
-                <div className="relative">
-                  <select
-                    value={ttlToSelectValue(ttl)}
-                    onChange={(event) => setTtl(selectValueToTtl(event.target.value))}
-                    className="w-full appearance-none rounded-xl border border-ink-700 bg-ink-900/60 px-3 py-2 pr-8 text-ink-100 focus:border-tide-400 outline-none transition"
-                  >
-                    {ttlOptions.map((option) => (
-                      <option key={String(option.value)} value={ttlToSelectValue(option.value)}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                  <svg
-                    className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-ink-200"
-                    width="12"
-                    height="12"
-                    viewBox="0 0 12 12"
-                    fill="none"
-                    aria-hidden="true"
-                  >
-                    <path d="M2 4l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                  </svg>
-                </div>
-              </label>
-
-              <label className={clsx(
-                "flex items-center gap-3 rounded-xl border px-4 py-3 text-sm",
-                burnDisabled
-                  ? "border-ink-700/50 bg-ink-900/40 text-ink-500 cursor-not-allowed"
-                  : "border-ink-700 bg-ink-900/60 text-ink-200 cursor-pointer"
-              )}>
-                <input
-                  type="checkbox"
-                  checked={burnChecked}
-                  disabled={burnDisabled}
-                  onChange={(event) => setBurnAfterRead(event.target.checked)}
-                  className="h-4 w-4 rounded border-ink-700 bg-ink-900 text-tide-500 disabled:opacity-50 shrink-0"
-                />
-                <span>
-                  Burn after first read
-                  {burnHint ? <span className="ml-1.5 text-xs text-ink-500">{burnHint}</span> : null}
-                </span>
-              </label>
             </div>
 
             {error ? (
@@ -779,6 +781,10 @@ export default function HomePage() {
                 {error}
               </div>
             ) : null}
+
+            <p className="text-xs text-ink-200/60">
+              The message deletes itself after someone opens it – one view, then it's gone forever.
+            </p>
 
             <div className="flex flex-wrap items-center gap-3">
               <button
@@ -795,7 +801,9 @@ export default function HomePage() {
                 {loading ? "Creating..." : "Create"}
               </button>
               <span className="text-xs text-ink-200/60">
-                {mode === "secure" ? "End-to-end encrypted" : "Encrypted at rest"}
+                {mode === "secure"
+                  ? "Encrypted in your browser before it leaves – only the recipient can decrypt it."
+                  : "Encrypted on our servers – only someone with the link can open it."}
               </span>
             </div>
 
@@ -828,11 +836,7 @@ export default function HomePage() {
                       {copied ? "Copied!" : "Copy"}
                     </button>
                   </div>
-                  {result.expiresAt ? (
-                    <p className="text-xs text-ink-200/60">Expires: {new Date(result.expiresAt).toLocaleString()}</p>
-                  ) : (
-                    <p className="text-xs text-ink-200/60">Burns after first read</p>
-                  )}
+                  <p className="text-xs text-ink-200/60">Burns after first read</p>
                 </section>
               )}
             </div>
@@ -861,7 +865,6 @@ export default function HomePage() {
                   type="button"
                   onClick={() => {
                     setFileMode(option);
-                    setFileBurnAfterRead(false);
                     setFileError(null);
                     setFileResult(null);
                   }}
@@ -875,27 +878,19 @@ export default function HomePage() {
               ))}
             </div>
 
-            <div className="space-y-2">
-              <input
-                type="file"
-                onChange={(event) => {
-                  const next = event.target.files?.[0] ?? null;
-                  setFile(next);
-                  setFileError(null);
-                  setFileResult(null);
-                  resetUploadProgress();
-                }}
-                className="w-full rounded-2xl border border-ink-700 bg-ink-900/60 p-3 text-sm text-ink-100 file:mr-4 file:rounded-full file:border-0 file:bg-tide-500/20 file:px-4 file:py-2 file:text-xs file:uppercase file:tracking-[0.35em] file:text-tide-200"
-              />
-              <div className="flex items-center justify-between text-xs text-ink-200">
-                <span>{file ? formatBytes(file.size) : "No file selected"}</span>
-                <span className={file && file.size > MAX_FILE_BYTES ? "text-ember-300" : ""}>500 MB max</span>
-              </div>
-            </div>
+            <DropZone
+              file={file}
+              onFile={(next) => {
+                setFile(next);
+                setFileError(null);
+                setFileResult(null);
+                resetUploadProgress();
+              }}
+            />
 
-            <div className="grid gap-4 md:grid-cols-2">
+            <div className="space-y-2">
               <label className="space-y-2 text-sm text-ink-200">
-                <span className="block text-xs uppercase tracking-[0.3em] text-ink-200">Expiration</span>
+                <span className="block text-xs uppercase tracking-[0.3em] text-ink-200">Expires after</span>
                 <div className="relative">
                   <select
                     value={fileExpiresIn}
@@ -920,25 +915,9 @@ export default function HomePage() {
                   </svg>
                 </div>
               </label>
-
-              <label className={clsx(
-                "flex items-center gap-3 rounded-xl border px-4 py-3 text-sm",
-                fileMode === "quick"
-                  ? "border-ink-700/50 bg-ink-900/40 text-ink-500 cursor-not-allowed"
-                  : "border-ink-700 bg-ink-900/60 text-ink-200 cursor-pointer"
-              )}>
-                <input
-                  type="checkbox"
-                  checked={fileMode === "quick" ? true : fileBurnAfterRead}
-                  disabled={fileMode === "quick"}
-                  onChange={(event) => setFileBurnAfterRead(event.target.checked)}
-                  className="h-4 w-4 rounded border-ink-700 bg-ink-900 text-tide-500 disabled:opacity-50 shrink-0"
-                />
-                <span>
-                  Burn after first download
-                  {fileMode === "quick" ? <span className="ml-1.5 text-xs text-ink-500">(always on)</span> : null}
-                </span>
-              </label>
+              <p className="text-xs text-ink-200/60">
+                The file deletes itself after the first download – and automatically after the time above, whichever comes first.
+              </p>
             </div>
 
             {resumeState ? (
@@ -977,7 +956,9 @@ export default function HomePage() {
                 </button>
               ) : null}
               <span className="text-xs text-ink-200/60">
-                {fileMode === "secure" ? "End-to-end encrypted" : "Encrypted at rest"}
+                {fileMode === "secure"
+                  ? "Encrypted in your browser before it leaves – only the recipient can decrypt it."
+                  : "Encrypted on our servers – only someone with the link can open it."}
               </span>
             </div>
 
@@ -1034,9 +1015,7 @@ export default function HomePage() {
                     {fileCopied ? "Copied!" : "Copy"}
                   </button>
                 </div>
-              {fileResult.expiresAt ? (
-                <p className="text-xs text-ink-200/60">Expires: {new Date(fileResult.expiresAt).toLocaleString()}</p>
-              ) : null}
+              <p className="text-xs text-ink-200/60">Burns after first download</p>
             </section>
           ) : null}
           </section>

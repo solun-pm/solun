@@ -48,8 +48,17 @@ export default async function LearnArticlePage(props: { params: Promise<{ slug: 
     "@type": "Article",
     headline: article.title,
     description: article.description,
+    datePublished: article.datePublished,
+    dateModified: article.dateModified,
     author: { "@type": "Organization", name: "Solun" },
-    publisher: { "@type": "Organization", name: "Solun" },
+    publisher: {
+      "@type": "Organization",
+      name: "Solun",
+      logo: {
+        "@type": "ImageObject",
+        url: `${siteUrl}/logo.svg`
+      }
+    },
     mainEntityOfPage: `${siteUrl}/learn/${article.slug}`
   };
 

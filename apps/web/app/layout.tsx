@@ -75,7 +75,22 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" className={`${display.variable} ${mono.variable}`}>
-      <body className="antialiased">{children}</body>
+      <body className="antialiased">
+        {children}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              // Remove preload class after DOM content loaded to enable transitions
+              document.body.classList.add('preload');
+              document.addEventListener('DOMContentLoaded', function() {
+                setTimeout(function() {
+                  document.body.classList.remove('preload');
+                }, 100);
+              });
+            `
+          }}
+        />
+      </body>
     </html>
   );
 }

@@ -3,7 +3,16 @@ import { learnArticles } from "./content";
 
 export const metadata = {
   title: "Learn",
-  description: "Guides for secure paste and file sharing with privacy-first practices."
+  description: "Guides for secure paste and file sharing with privacy-first practices.",
+  alternates: {
+    canonical: "https://solun.pm/learn"
+  },
+  openGraph: {
+    title: "Learn · Solun",
+    description: "Guides for secure paste and file sharing with privacy-first practices.",
+    url: "https://solun.pm/learn",
+    type: "website"
+  }
 };
 
 export default function LearnIndexPage() {

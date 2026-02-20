@@ -26,3 +26,34 @@ button {
 code {
   font-family: var(--font-mono), monospace;
 }
+
+/* CLS (Cumulative Layout Shift) fixes */
+/* Reserve minimum height for main content container to prevent layout shift */
+main.flex {
+  min-height: 100vh;
+}
+
+/* Prevent layout shift on main content card */
+main.flex > div.w-full {
+  min-height: 650px;
+}
+
+/* Disable transitions and animations during initial page load */
+.preload *,
+.preload *::before,
+.preload *::after {
+  transition: none !important;
+  animation: none !important;
+}
+
+/* Optimize backdrop-blur for initial render */
+@media (prefers-reduced-motion: no-preference) {
+  .backdrop-blur {
+    will-change: backdrop-filter;
+  }
+}
+
+/* Ensure proper stacking context for transformed elements */
+[style*="transform"] {
+  will-change: transform;
+}

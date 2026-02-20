@@ -2,7 +2,16 @@ import Link from "next/link";
 
 export const metadata = {
   title: "Solun Guide",
-  description: "A pillar guide to privacy-first paste and file sharing with secure defaults and short-lived links."
+  description: "A pillar guide to privacy-first paste and file sharing with secure defaults and short-lived links.",
+  alternates: {
+    canonical: "https://solun.pm/learn/overview"
+  },
+  openGraph: {
+    title: "Solun Guide · Solun",
+    description: "A pillar guide to privacy-first paste and file sharing with secure defaults and short-lived links.",
+    url: "https://solun.pm/learn/overview",
+    type: "article"
+  }
 };
 
 const sections = [

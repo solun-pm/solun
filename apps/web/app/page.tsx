@@ -321,13 +321,15 @@ export default function HomePage() {
         keyFragment = await exportKey(key);
       }
 
-      const payload = {
+      const basePayload = {
         content: payloadContent,
         mode,
-        ttl: "burn" as const,
-        burnAfterRead: true,
-        iv
+        ttl: "burn" as const
       };
+      const payload =
+        mode === "secure"
+          ? { ...basePayload, burnAfterRead: true, iv }
+          : basePayload;
 
       const validation = validateCreatePayload(payload);
       if (!validation.ok) {

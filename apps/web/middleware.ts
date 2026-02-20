@@ -37,13 +37,25 @@ export function middleware(request: NextRequest) {
   // Content-Security-Policy
   // Note: Next.js requires 'unsafe-inline' and 'unsafe-eval' for development
   // Consider tightening this in production with nonces
+  const connectSources = ["'self'"];
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL;
+  if (apiUrl) {
+    try {
+      connectSources.push(new URL(apiUrl).origin);
+    } catch {
+      // Ignore invalid API URL to avoid breaking CSP generation
+    }
+  } else if (process.env.NODE_ENV !== "production") {
+    connectSources.push("http://localhost:3001");
+  }
+
   const csp = [
     "default-src 'self'",
     "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data: https:",
     "font-src 'self' data:",
-    "connect-src 'self'",
+    `connect-src ${connectSources.join(" ")}`,
     "frame-ancestors 'none'"
   ].join("; ");
 

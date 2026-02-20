@@ -1,14 +1,12 @@
-name: CI
+name: Full CI
 
 on:
   push:
     branches: [main, dev]
-  pull_request:
-    branches: [main, dev]
 
 jobs:
-  ci:
-    name: Lint, Typecheck & Build
+  quality:
+    name: Quality Gate (Full)
     runs-on: ubuntu-latest
 
     steps:
@@ -32,11 +30,43 @@ jobs:
       - name: Build shared package
         run: pnpm --filter @solun/shared build
 
+      - name: Lint
+        run: pnpm lint
+
       - name: Typecheck API
         run: pnpm --filter @solun/api typecheck
 
       - name: Typecheck Web
         run: pnpm --filter @solun/web typecheck
+
+      - name: Unit Tests
+        run: pnpm -r run test --if-present
+
+  build:
+    name: Build Gate
+    runs-on: ubuntu-latest
+    needs: [quality]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.5
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build shared package
+        run: pnpm --filter @solun/shared build
 
       - name: Build API
         run: pnpm --filter @solun/api build

@@ -11,6 +11,7 @@
     "start": "node dist/index.js",
     "cleanup": "tsx src/run-file-cleanup.ts",
     "lint": "echo \"No lint configured\"",
+    "pretypecheck": "prisma generate --schema=prisma/schema.prisma",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {

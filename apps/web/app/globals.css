@@ -28,15 +28,7 @@ code {
 }
 
 /* CLS (Cumulative Layout Shift) fixes */
-/* Reserve minimum height for main content container to prevent layout shift */
-main.flex {
-  min-height: 100vh;
-}
-
-/* Prevent layout shift on main content card */
-main.flex > div.w-full {
-  min-height: 650px;
-}
+/* Use opt-in classes instead of forcing minimum heights globally. */
 
 /* Disable transitions and animations during initial page load */
 .preload *,

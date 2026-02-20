@@ -132,6 +132,28 @@ export default function HomePage() {
   const textPanelRef = useRef<HTMLDivElement | null>(null);
   const filesPanelRef = useRef<HTMLDivElement | null>(null);
   const [panelHeight, setPanelHeight] = useState<number | null>(null);
+  const jsonLd = [
+    {
+      "@context": "https://schema.org",
+      "@type": "WebSite",
+      name: "Solun",
+      url: "https://solun.pm",
+      description:
+        "Privacy-first paste and file sharing with end-to-end encryption, burn-after-read, and strict expirations.",
+      publisher: {
+        "@type": "Organization",
+        name: "Solun",
+        url: "https://solun.pm"
+      }
+    },
+    {
+      "@context": "https://schema.org",
+      "@type": "Organization",
+      name: "Solun",
+      url: "https://solun.pm",
+      sameAs: ["https://github.com/solun-pm/solun"]
+    }
+  ];
 
   const {
     progress,
@@ -622,7 +644,16 @@ export default function HomePage() {
       <div className="w-full max-w-3xl space-y-6 rounded-3xl border border-ink-700 bg-ink-800/70 p-8 shadow-glow backdrop-blur">
         <nav className="flex flex-wrap items-center justify-between gap-3">
           <ShareSwitch value={shareKind} onChange={setShareKind} />
-          <span className="text-xs text-ink-200/60">Encrypted sharing</span>
+          <div className="flex items-center gap-2 text-xs text-ink-200/60">
+            <span>Encrypted sharing</span>
+            <span className="text-ink-500/60">•</span>
+            <a
+              href="/learn"
+              className="text-tide-300/80 transition hover:text-tide-200"
+            >
+              Learn
+            </a>
+          </div>
         </nav>
         <header className="flex items-start gap-4">
           <Image
@@ -1013,26 +1044,35 @@ export default function HomePage() {
 
         <div className="flex flex-wrap items-center justify-between gap-3 border-t border-ink-700 pt-6 text-xs text-ink-200/70">
           <span>Made with love by the Solun team ♥ </span>
-          <a
-            href="https://github.com/solun-pm/solun"
-            className="inline-flex items-center gap-2 text-tide-300 hover:text-tide-200 transition"
-            target="_blank"
-            rel="noreferrer"
-            aria-label="Solun on GitHub"
-            title="Solun on GitHub"
-          >
-            <svg
-              viewBox="0 0 24 24"
-              width="18"
-              height="18"
-              fill="currentColor"
-              aria-hidden="true"
+          <div className="flex items-center gap-4">
+            <a href="/learn" className="text-tide-300 hover:text-tide-200 transition">
+              Learn
+            </a>
+            <a href="/roadmap" className="text-tide-300 hover:text-tide-200 transition">
+              Roadmap
+            </a>
+            <a
+              href="https://github.com/solun-pm/solun"
+              className="inline-flex items-center gap-2 text-tide-300 hover:text-tide-200 transition"
+              target="_blank"
+              rel="noreferrer"
+              aria-label="Solun on GitHub"
+              title="Solun on GitHub"
             >
-              <path d="M12 2a10 10 0 0 0-3.16 19.49c.5.1.68-.22.68-.48v-1.7c-2.77.6-3.36-1.2-3.36-1.2-.45-1.16-1.1-1.47-1.1-1.47-.9-.62.07-.61.07-.61 1 .07 1.53 1.04 1.53 1.04.9 1.54 2.36 1.1 2.94.84.09-.66.36-1.1.65-1.35-2.21-.25-4.53-1.1-4.53-4.9 0-1.08.39-1.96 1.03-2.65-.1-.25-.45-1.27.1-2.65 0 0 .84-.27 2.75 1.02a9.5 9.5 0 0 1 5 0c1.9-1.29 2.74-1.02 2.74-1.02.56 1.38.21 2.4.1 2.65.64.69 1.03 1.57 1.03 2.65 0 3.8-2.32 4.65-4.54 4.9.37.32.7.93.7 1.88v2.78c0 .27.18.59.69.48A10 10 0 0 0 12 2Z"/>
-            </svg>
-          </a>
+              <svg
+                viewBox="0 0 24 24"
+                width="18"
+                height="18"
+                fill="currentColor"
+                aria-hidden="true"
+              >
+                <path d="M12 2a10 10 0 0 0-3.16 19.49c.5.1.68-.22.68-.48v-1.7c-2.77.6-3.36-1.2-3.36-1.2-.45-1.16-1.1-1.47-1.1-1.47-.9-.62.07-.61.07-.61 1 .07 1.53 1.04 1.53 1.04.9 1.54 2.36 1.1 2.94.84.09-.66.36-1.1.65-1.35-2.21-.25-4.53-1.1-4.53-4.9 0-1.08.39-1.96 1.03-2.65-.1-.25-.45-1.27.1-2.65 0 0 .84-.27 2.75 1.02a9.5 9.5 0 0 1 5 0c1.9-1.29 2.74-1.02 2.74-1.02.56 1.38.21 2.4.1 2.65.64.69 1.03 1.57 1.03 2.65 0 3.8-2.32 4.65-4.54 4.9.37.32.7.93.7 1.88v2.78c0 .27.18.59.69.48A10 10 0 0 0 12 2Z"/>
+              </svg>
+            </a>
+          </div>
         </div>
       </div>
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
     </main>
   );
 }

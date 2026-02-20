@@ -1,10 +1,9 @@
 name: Release
 
 on:
-  push:
-    tags:
-      - 'v*.*.*'
-      - 'v*.*.*-dev*'
+  workflow_run:
+    workflows: ["Full CI"]
+    types: [completed]
 
 jobs:
   create-release:
@@ -12,12 +11,32 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+    if: github.event.workflow_run.conclusion == 'success'
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+
+      - name: Fetch tags
+        run: git fetch --tags --force
+
+      - name: Resolve release tag
+        id: tag
+        run: |
+          TAG=$(git tag --points-at "${{ github.event.workflow_run.head_sha }}" | grep -E '^v[0-9]+\\.[0-9]+\\.[0-9]+(-dev.*)?$' | head -n 1)
+          if [ -z "$TAG" ]; then
+            echo "No release tag found on this commit."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "skip=false" >> "$GITHUB_OUTPUT"
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
+        if: steps.tag.outputs.skip != 'true'
         with:
+          tag_name: ${{ steps.tag.outputs.tag }}
           generate_release_notes: true

@@ -3,6 +3,9 @@ name: Full CI
 on:
   push:
     branches: [main, dev]
+    tags:
+      - "v*.*.*"
+      - "v*.*.*-dev*"
 
 jobs:
   quality:

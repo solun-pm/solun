@@ -4,7 +4,9 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "predev": "pnpm --filter @solun/shared build",
     "dev": "next dev",
+    "prebuild": "pnpm --filter @solun/shared build",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",

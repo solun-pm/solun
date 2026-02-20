@@ -17,3 +17,23 @@ model Paste {
   expiresAt     DateTime?
   createdAt     DateTime @default(now())
 }
+
+model SharedFile {
+  id            String   @id @default(cuid())
+  shortId       String   @unique
+  mode          String
+  status        String
+  sizeBytes     Int
+  contentType   String
+  originalName  String
+  r2Key         String
+  metadataKey   String
+  uploadId      String?
+  encryptedKey  String?
+  downloadCount Int      @default(0)
+  maxDownloads  Int?
+  expiresAt     DateTime
+  createdAt     DateTime @default(now())
+
+  @@index([status, expiresAt])
+}

@@ -4,15 +4,21 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "predev": "pnpm --filter @solun/shared build",
     "dev": "tsx watch src/index.ts",
+    "prestart": "pnpm --filter @solun/shared build",
     "build": "tsc -p tsconfig.json",
     "start": "node dist/index.js",
+    "cleanup": "tsx src/run-file-cleanup.ts",
     "lint": "echo \"No lint configured\"",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.758.0",
+    "@aws-sdk/s3-request-presigner": "^3.758.0",
     "@prisma/client": "^5.22.0",
     "@solun/shared": "workspace:*",
+    "busboy": "^1.6.0",
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
@@ -23,6 +29,7 @@
     "zod": "^3.24.1"
   },
   "devDependencies": {
+    "@types/busboy": "^1.5.4",
     "@types/cors": "^2.8.17",
     "@types/express": "^4.17.21",
     "@types/node": "^20.11.30",

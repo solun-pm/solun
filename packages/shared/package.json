@@ -3,16 +3,16 @@
   "version": "1.0.5",
   "private": true,
   "type": "module",
-  "main": "./dist/types.js",
-  "types": "./dist/types.d.ts",
+  "main": "./types.ts",
+  "types": "./types.ts",
   "exports": {
     ".": {
-      "types": "./dist/types.d.ts",
-      "default": "./dist/types.js"
+      "types": "./types.ts",
+      "default": "./types.ts"
     }
   },
   "files": [
-    "dist"
+    "types.ts"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.json",

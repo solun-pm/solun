@@ -448,12 +448,13 @@ export default function HomePage() {
 
       setStatus("uploading");
       const uploadTask = (async () => {
+        const payload = encrypted.ciphertext.buffer.slice(
+          encrypted.ciphertext.byteOffset,
+          encrypted.ciphertext.byteOffset + encrypted.ciphertext.byteLength
+        ) as ArrayBuffer;
         const uploadResponse = await fetch(uploadUrl, {
           method: "PUT",
-          body: encrypted.ciphertext.buffer.slice(
-            encrypted.ciphertext.byteOffset,
-            encrypted.ciphertext.byteOffset + encrypted.ciphertext.byteLength
-          )
+          body: new Blob([payload])
         });
 
         if (!uploadResponse.ok) {
@@ -1011,7 +1012,7 @@ export default function HomePage() {
         </div>
 
         <div className="flex flex-wrap items-center justify-between gap-3 border-t border-ink-700 pt-6 text-xs text-ink-200/70">
-          <span>Made with love by the Solun team · Open source</span>
+          <span>Made with love by the Solun team ♥ </span>
           <a
             href="https://github.com/solun-pm/solun"
             className="inline-flex items-center gap-2 text-tide-300 hover:text-tide-200 transition"

@@ -1,6 +1,6 @@
 import { useCallback, useRef, useState } from "react";
 
-export type DownloadProgress = {
+type DownloadProgress = {
   status: "idle" | "downloading" | "decrypting" | "assembling" | "done" | "error";
   totalChunks: number;
   currentChunk: number;

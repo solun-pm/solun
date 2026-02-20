@@ -3,6 +3,7 @@
   "private": true,
   "packageManager": "pnpm@9.15.5",
   "scripts": {
+    "postinstall": "pnpm --filter @solun/shared build",
     "dev": "turbo dev",
     "build": "turbo build",
     "lint": "turbo lint",

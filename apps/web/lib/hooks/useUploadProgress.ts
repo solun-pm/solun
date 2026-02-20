@@ -1,6 +1,6 @@
 import { useCallback, useRef, useState } from "react";
 
-export type UploadProgress = {
+type UploadProgress = {
   status: "idle" | "encrypting" | "uploading" | "finalizing" | "done" | "error";
   totalChunks: number;
   currentChunk: number;

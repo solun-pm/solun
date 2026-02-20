@@ -105,7 +105,7 @@ export default function FileDownloadClient({ id }: { id: string }) {
       console.log("[download] metadata", metadata);
       setTotals(metadata.totalSize, metadata.totalChunks);
 
-      const chunks: Uint8Array[] = [];
+      const chunks: BlobPart[] = [];
       const authTagBytes = 16;
       for (let index = 0; index < metadata.totalChunks; index += 1) {
         const isLast = index === metadata.totalChunks - 1;
@@ -137,7 +137,7 @@ export default function FileDownloadClient({ id }: { id: string }) {
         const decrypted = await decryptChunk(encryptedChunk, metadata.ivs[index], key);
         markDecrypted(index + 1);
 
-        chunks.push(new Uint8Array(decrypted));
+        chunks.push(decrypted as ArrayBuffer);
       }
 
       setAssembling();

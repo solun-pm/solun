@@ -34,5 +34,5 @@ export async function decryptChunk(
   key: CryptoKey
 ): Promise<ArrayBuffer> {
   const ivBytes = fromBase64(ivB64);
-  return crypto.subtle.decrypt({ name: "AES-GCM", iv: ivBytes }, key, ciphertext);
+  return crypto.subtle.decrypt({ name: "AES-GCM", iv: ivBytes as BufferSource }, key, ciphertext);
 }

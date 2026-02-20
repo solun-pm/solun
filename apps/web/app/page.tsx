@@ -450,7 +450,10 @@ export default function HomePage() {
       const uploadTask = (async () => {
         const uploadResponse = await fetch(uploadUrl, {
           method: "PUT",
-          body: encrypted.ciphertext
+          body: encrypted.ciphertext.buffer.slice(
+            encrypted.ciphertext.byteOffset,
+            encrypted.ciphertext.byteOffset + encrypted.ciphertext.byteLength
+          )
         });
 
         if (!uploadResponse.ok) {
@@ -466,9 +469,11 @@ export default function HomePage() {
 
         const etag = uploadResponse.headers.get("ETag") || uploadResponse.headers.get("etag");
         if (!etag) {
+          const headerList: Array<[string, string]> = [];
+          uploadResponse.headers.forEach((value, key) => headerList.push([key, value]));
           console.error("Missing ETag header", {
             partNumber,
-            headers: Array.from(uploadResponse.headers.entries())
+            headers: headerList
           });
           throw new Error(`Missing ETag for part ${partNumber}.`);
         }

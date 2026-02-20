@@ -2,7 +2,7 @@ import dotenv from "dotenv";
 import { z } from "zod";
 import { PrismaClient } from "@prisma/client";
 import { S3Client } from "@aws-sdk/client-s3";
-import { runFileCleanup } from "./file-cleanup";
+import { runFileCleanup } from "./file-cleanup.js";
 
 dotenv.config();
 

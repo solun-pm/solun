@@ -21,7 +21,7 @@ import {
   pasteRecordSchema,
   type FileMetadata
 } from "@solun/shared";
-import { runFileCleanup } from "./file-cleanup";
+import { runFileCleanup } from "./file-cleanup.js";
 import {
   AbortMultipartUploadCommand,
   CompleteMultipartUploadCommand,

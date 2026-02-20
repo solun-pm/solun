@@ -1,4 +1,4 @@
-export type LearnSection = {
+type LearnSection = {
   title: string;
   paragraphs: string[];
 };
@@ -521,7 +521,7 @@ export const learnArticles: LearnArticle[] = [
   }
 ];
 
-export const learnArticleMap = new Map(learnArticles.map((article) => [article.slug, article]));
+const learnArticleMap = new Map(learnArticles.map((article) => [article.slug, article]));
 
 export function getArticle(slug: string): LearnArticle | undefined {
   return learnArticleMap.get(slug);

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Script from "next/script";
 
 export const metadata = {
   title: "Roadmap",
@@ -122,7 +123,9 @@ export default function RoadmapPage() {
           </div>
         </section>
       </div>
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
+      <Script id="roadmap-jsonld" type="application/ld+json">
+        {JSON.stringify(jsonLd)}
+      </Script>
     </main>
   );
 }

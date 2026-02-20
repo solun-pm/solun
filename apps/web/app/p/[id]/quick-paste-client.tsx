@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import type { PasteRecord } from "@solun/shared";
 
@@ -8,37 +8,18 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001";
 
 type LoadState = "checking" | "exists" | "loading" | "ready" | "error" | "not-found";
 
-export default function QuickPasteClient({ id }: { id: string }) {
-  const [state, setState] = useState<LoadState>("checking");
+export default function QuickPasteClient({
+  id,
+  initialState
+}: {
+  id: string;
+  initialState?: LoadState;
+}) {
+  const [state, setState] = useState<LoadState>(initialState ?? "checking");
   const [data, setData] = useState<PasteRecord | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const checkedRef = useRef(false);
 
   // On mount: HEAD check – does the message exist? Don't read or delete it yet.
-  useEffect(() => {
-    if (checkedRef.current) return;
-    checkedRef.current = true;
-
-    async function check() {
-      try {
-        const response = await fetch(`${API_URL}/api/paste/${id}`, {
-          method: "HEAD",
-          cache: "no-store"
-        });
-        if (response.status === 404) {
-          setState("not-found");
-        } else if (response.ok) {
-          setState("exists");
-        } else {
-          setState("not-found");
-        }
-      } catch {
-        setState("not-found");
-      }
-    }
-
-    void check();
-  }, [id]);
 
   async function handleReveal() {
     setState("loading");

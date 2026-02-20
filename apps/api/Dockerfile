@@ -12,7 +12,7 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.base.json turbo.js
 COPY packages ./packages
 COPY apps/api ./apps/api
 
-RUN pnpm install --frozen-lockfile
+RUN pnpm install --no-frozen-lockfile
 RUN pnpm --filter @solun/shared build
 RUN pnpm --filter @solun/api exec prisma generate
 RUN pnpm --filter @solun/api build

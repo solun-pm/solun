@@ -7,6 +7,7 @@
     "predev": "pnpm --filter @solun/shared build",
     "dev": "tsx watch src/index.ts",
     "prestart": "pnpm --filter @solun/shared build",
+    "prebuild": "prisma generate --schema=prisma/schema.prisma",
     "build": "tsc -p tsconfig.json",
     "start": "node dist/index.js",
     "cleanup": "tsx src/run-file-cleanup.ts",

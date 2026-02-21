@@ -13,7 +13,7 @@ import { encryptChunk } from "../lib/file-crypto";
 import { useUploadProgress } from "../lib/hooks/useUploadProgress";
 import ShareSwitch, { type ShareKind } from "./components/share-switch";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL -- "http://localhost:3001";
+const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001";
 
 const fileExpirationOptions: { label: string; value: FileExpiration }[] = [
   { label: "1 hour", value: "1h" },
@@ -158,7 +158,7 @@ function DropZone({ file, onFile }: { file: File | null; onFile: (f: File) => vo
   }
 
   function handleChange(event: React.ChangeEvent<HTMLInputElement>) {
-    const next = event.target.files-.[0];
+    const next = event.target.files?.[0];
     if (next) onFile(next);
   }
 
@@ -167,17 +167,17 @@ function DropZone({ file, onFile }: { file: File | null; onFile: (f: File) => vo
       role="button"
       tabIndex={0}
       aria-label="File drop zone"
-      onClick={() => inputRef.current-.click()}
-      onKeyDown={(e) => e.key === "Enter" && inputRef.current-.click()}
+      onClick={() => inputRef.current?.click()}
+      onKeyDown={(e) => e.key === "Enter" && inputRef.current?.click()}
       onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
       onDragLeave={() => setDragging(false)}
       onDrop={handleDrop}
       className={clsx(
         "flex h-36 w-full cursor-pointer flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed transition-all duration-200",
         dragging
-          - "border-tide-400 bg-tide-400/5 scale-[1.01]"
+          ? "border-tide-400 bg-tide-400/5 scale-[1.01]"
           : file
-            - "border-tide-500/40 bg-ink-900/40"
+            ? "border-tide-500/40 bg-ink-900/40"
             : "border-ink-700 bg-ink-900/40 hover:border-ink-600 hover:bg-ink-900/60"
       )}
     >
@@ -187,7 +187,7 @@ function DropZone({ file, onFile }: { file: File | null; onFile: (f: File) => vo
         className="hidden"
         onChange={handleChange}
       />
-      {file - (
+      {file ? (
         <>
           <svg
             width="24"
@@ -205,8 +205,8 @@ function DropZone({ file, onFile }: { file: File | null; onFile: (f: File) => vo
             <polyline points="14 2 14 8 20 8"/>
           </svg>
           <span className="max-w-[90%] truncate text-sm font-medium text-ink-100">{file.name}</span>
-          <span className={clsx("text-xs", file.size > MAX_FILE_BYTES - "text-ember-300" : "text-ink-400")}>
-            {formatBytes(file.size)}{file.size > MAX_FILE_BYTES - " - exceeds 500 MB limit" : ""}
+          <span className={clsx("text-xs", file.size > MAX_FILE_BYTES ? "text-ember-300" : "text-ink-400")}>
+            {formatBytes(file.size)}{file.size > MAX_FILE_BYTES ? " - exceeds 500 MB limit" : ""}
           </span>
         </>
       ) : (
@@ -233,6 +233,408 @@ function DropZone({ file, onFile }: { file: File | null; onFile: (f: File) => vo
       )}
     </div>
   );
+}
+
+type UploadActions = Pick<
+  ReturnType<typeof useUploadProgress>,
+  | "setTotals"
+  | "setStatus"
+  | "setError"
+  | "markEncrypted"
+  | "setEncryptedChunks"
+  | "markUploaded"
+  | "setUploadedBytes"
+  | "setFinalizing"
+  | "setDone"
+>;
+
+function useAutoReset(active: boolean, onReset: () => void, delayMs: number) {
+  useEffect(() => {
+    if (!active) return;
+    const timeout = window.setTimeout(onReset, delayMs);
+    return () => window.clearTimeout(timeout);
+  }, [active, delayMs, onReset]);
+}
+
+function useResumeTracker({
+  file,
+  shareKind,
+  fileMode,
+  setResumeState
+}: {
+  file: File | null;
+  shareKind: ShareKind;
+  fileMode: FileMode;
+  setResumeState: (state: ResumeState | null) => void;
+}) {
+  useEffect(() => {
+    if (!file || shareKind !== "files" || fileMode !== "secure") {
+      setResumeState(null);
+      return;
+    }
+    setResumeState(loadResumeState(file));
+  }, [file, shareKind, fileMode, setResumeState]);
+}
+
+function useSharePanelHeight({
+  shareKind,
+  textPanelRef,
+  filesPanelRef,
+  deps
+}: {
+  shareKind: ShareKind;
+  textPanelRef: React.RefObject<HTMLDivElement | null>;
+  filesPanelRef: React.RefObject<HTMLDivElement | null>;
+  deps: unknown[];
+}) {
+  const [height, setHeight] = useState<number | null>(null);
+
+  useLayoutEffect(() => {
+    const panel = shareKind === "text" ? textPanelRef.current : filesPanelRef.current;
+    if (!panel) return;
+    const next = panel.scrollHeight || panel.getBoundingClientRect().height;
+    setHeight(next);
+  }, [shareKind, textPanelRef, filesPanelRef, ...deps]);
+
+  useLayoutEffect(() => {
+    const panel = shareKind === "text" ? textPanelRef.current : filesPanelRef.current;
+    if (!panel || typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(() => {
+      const next = panel.scrollHeight || panel.getBoundingClientRect().height;
+      setHeight(next);
+    });
+    observer.observe(panel);
+    return () => observer.disconnect();
+  }, [shareKind, textPanelRef, filesPanelRef]);
+
+  return height;
+}
+
+async function createPaste({
+  mode,
+  content,
+  setError,
+  setResult,
+  setLinkToast,
+  setLoading
+}: {
+  mode: PasteMode;
+  content: string;
+  setError: (value: string | null) => void;
+  setResult: (value: PasteResult) => void;
+  setLinkToast: (value: boolean) => void;
+  setLoading: (value: boolean) => void;
+}) {
+  setLoading(true);
+  setError(null);
+  setResult(null);
+
+  try {
+    if (!content.trim()) {
+      setError("Paste cannot be empty.");
+      return;
+    }
+
+    const ttl = "burn" as const;
+    let keyFragment: string | null = null;
+    let payload: {
+      content: string;
+      mode: PasteMode;
+      ttl: "burn" | null;
+      burnAfterRead?: boolean;
+      iv?: string;
+    } = { content, mode, ttl };
+
+    if (mode === "secure") {
+      const key = await generateKey();
+      const exported = await exportKey(key);
+      const encrypted = await encrypt(content, key);
+      keyFragment = exported;
+      payload = {
+        content: encrypted.ciphertext,
+        mode,
+        ttl,
+        burnAfterRead: true,
+        iv: encrypted.iv
+      };
+    }
+
+    const validation = validateCreatePayload(payload);
+    if (!validation.ok) {
+      setError(validation.error);
+      return;
+    }
+
+    const response = await fetch(`${API_URL}/api/paste`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+
+    if (!response.ok) {
+      const body = (await response.json().catch(() => ({}))) as { error?: string };
+      throw new Error(body.error ?? "Failed to create paste.");
+    }
+
+    const data = (await response.json()) as { id: string; expiresAt: string | null };
+    const base = window.location.origin;
+    const path = mode === "secure" ? `/s/${data.id}` : `/p/${data.id}`;
+    const url = keyFragment ? `${base}${path}#key=${keyFragment}` : `${base}${path}`;
+    setResult({ url, expiresAt: data.expiresAt });
+    setLinkToast(true);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Failed to create paste.";
+    setError(message);
+  } finally {
+    setLoading(false);
+  }
+}
+
+async function quickUpload({
+  selected,
+  fileChunks,
+  fileExpiresIn,
+  setFileError,
+  setFileResult,
+  setFileLinkToast,
+  upload
+}: {
+  selected: File;
+  fileChunks: number;
+  fileExpiresIn: FileExpiration;
+  setFileError: (value: string | null) => void;
+  setFileResult: (value: FileResult) => void;
+  setFileLinkToast: (value: boolean) => void;
+  upload: UploadActions;
+}) {
+  setFileError(null);
+  setFileResult(null);
+  upload.setTotals(selected.size, fileChunks);
+  upload.setStatus("uploading");
+
+  try {
+    const form = new FormData();
+    form.append("expiresIn", fileExpiresIn);
+    form.append("file", selected);
+
+    const response = await fetch(`${API_URL}/api/files/quick`, {
+      method: "POST",
+      body: form
+    });
+
+    if (!response.ok) {
+      const body = (await response.json().catch(() => ({}))) as { error?: string };
+      throw new Error(body.error ?? "Upload failed.");
+    }
+
+    const data = (await response.json()) as { id: string; expiresAt: string | null };
+    upload.setUploadedBytes(selected.size);
+    upload.setFinalizing();
+    upload.setDone();
+
+    const url = `${window.location.origin}/f/${data.id}`;
+    setFileResult({ url, expiresAt: data.expiresAt ?? "" });
+    setFileLinkToast(true);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Upload failed.";
+    setFileError(message);
+    upload.setError(message);
+  }
+}
+
+async function secureUpload({
+  selected,
+  fileChunks,
+  fileExpiresIn,
+  resume,
+  setFileError,
+  setFileResult,
+  setFileLinkToast,
+  setResumeState,
+  upload
+}: {
+  selected: File;
+  fileChunks: number;
+  fileExpiresIn: FileExpiration;
+  resume: ResumeState | null;
+  setFileError: (value: string | null) => void;
+  setFileResult: (value: FileResult) => void;
+  setFileLinkToast: (value: boolean) => void;
+  setResumeState: (value: ResumeState | null) => void;
+  upload: UploadActions;
+}) {
+  setFileError(null);
+  setFileResult(null);
+  upload.setTotals(selected.size, fileChunks);
+
+  let state: ResumeState;
+  let key: CryptoKey;
+
+  if (resume) {
+    state = resume;
+    key = await importKey(resume.key);
+    if (resume.parts.length > 0) {
+      const uploadedBytes = Math.min(selected.size, resume.parts.length * resume.partSize);
+      upload.setUploadedBytes(uploadedBytes);
+      upload.setEncryptedChunks(resume.ivs.length);
+      upload.setStatus("uploading");
+    }
+  } else {
+    const initResponse = await fetch(`${API_URL}/api/files/initiate`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        mode: "secure",
+        expiresIn: fileExpiresIn,
+        sizeBytes: selected.size,
+        contentType: selected.type || "application/octet-stream",
+        originalName: selected.name,
+        burnAfterRead: true
+      })
+    });
+
+    if (!initResponse.ok) {
+      const body = (await initResponse.json().catch(() => ({}))) as { error?: string };
+      throw new Error(body.error ?? "Failed to initiate upload.");
+    }
+
+    const initData = (await initResponse.json()) as {
+      id: string;
+      uploadId: string;
+      r2Key: string;
+      metadataKey: string;
+      partSize: number;
+      expiresAt: string;
+    };
+
+    key = await generateKey();
+    const exportedKey = await exportKey(key);
+    state = {
+      id: initData.id,
+      uploadId: initData.uploadId,
+      r2Key: initData.r2Key,
+      metadataKey: initData.metadataKey,
+      partSize: initData.partSize,
+      totalChunks: fileChunks,
+      fileFingerprint: fingerprintFile(selected),
+      parts: [],
+      ivs: [],
+      expiresAt: initData.expiresAt,
+      key: exportedKey
+    };
+    saveResumeState(selected, state);
+    setResumeState(state);
+  }
+
+  try {
+    const uploaded = new Set(state.parts.map((part) => part.partNumber));
+    const parts = [...state.parts];
+    const ivs = [...state.ivs];
+
+    for (let index = 0; index < state.totalChunks; index += 1) {
+      const partNumber = index + 1;
+      if (uploaded.has(partNumber)) continue;
+
+      const start = index * state.partSize;
+      const end = Math.min(selected.size, start + state.partSize);
+      const buffer = await selected.slice(start, end).arrayBuffer();
+      const { ciphertext, iv } = await encryptChunk(buffer, key);
+      upload.markEncrypted(partNumber);
+      ivs[index] = iv;
+
+      const presignResponse = await fetch(`${API_URL}/api/files/presign`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: state.id, uploadId: state.uploadId, partNumbers: [partNumber] })
+      });
+
+      if (!presignResponse.ok) {
+        const body = (await presignResponse.json().catch(() => ({}))) as { error?: string };
+        throw new Error(body.error ?? "Failed to presign upload.");
+      }
+
+      const presignData = (await presignResponse.json()) as {
+        urls: { partNumber: number; url: string }[];
+      };
+      const url = presignData.urls[0]?.url;
+      if (!url) {
+        throw new Error("Missing presigned URL.");
+      }
+
+      const uploadBody = ciphertext.buffer.slice(
+        ciphertext.byteOffset,
+        ciphertext.byteOffset + ciphertext.byteLength
+      ) as ArrayBuffer;
+      const uploadResponse = await fetch(url, {
+        method: "PUT",
+        body: uploadBody
+      });
+
+      if (!uploadResponse.ok) {
+        throw new Error("Failed to upload chunk.");
+      }
+
+      const etagHeader = uploadResponse.headers.get("ETag") ?? uploadResponse.headers.get("etag");
+      if (!etagHeader) {
+        throw new Error("Missing ETag from upload.");
+      }
+
+      const etag = etagHeader.replace(/\"/g, "");
+      parts.push({ partNumber, etag });
+      upload.markUploaded(partNumber, ciphertext.byteLength);
+
+      const updatedState = { ...state, parts, ivs };
+      saveResumeState(selected, updatedState);
+      setResumeState(updatedState);
+    }
+
+    upload.setFinalizing();
+
+    const metadata: FileMetadata = {
+      chunkSize: state.partSize,
+      totalSize: selected.size,
+      totalChunks: state.totalChunks,
+      ivs
+    };
+
+    const metadataResponse = await fetch(`${API_URL}/api/files/metadata`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: state.id, metadata })
+    });
+
+    if (!metadataResponse.ok) {
+      const body = (await metadataResponse.json().catch(() => ({}))) as { error?: string };
+      throw new Error(body.error ?? "Failed to save metadata.");
+    }
+
+    const completeResponse = await fetch(`${API_URL}/api/files/complete`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        id: state.id,
+        uploadId: state.uploadId,
+        parts: [...parts].sort((a, b) => a.partNumber - b.partNumber)
+      })
+    });
+
+    if (!completeResponse.ok) {
+      const body = (await completeResponse.json().catch(() => ({}))) as { error?: string };
+      throw new Error(body.error ?? "Failed to complete upload.");
+    }
+
+    upload.setDone();
+    clearResumeState(selected);
+    setResumeState(null);
+
+    const url = `${window.location.origin}/f/${state.id}#key=${state.key}`;
+    setFileResult({ url, expiresAt: state.expiresAt });
+    setFileLinkToast(true);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Upload failed.";
+    setFileError(message);
+    upload.setError(message);
+  }
 }
 
 
@@ -276,7 +678,7 @@ export default function HomePage() {
     dispatchFile({ type: "patch", payload: { linkToast: next } });
 
   const bytes = useMemo(() => getByteLength(content), [content]);
-  const fileChunks = useMemo(() => (file - Math.ceil(file.size / FILE_CHUNK_SIZE) : 0), [file]);
+  const fileChunks = useMemo(() => (file ? Math.ceil(file.size / FILE_CHUNK_SIZE) : 0), [file]);
   const textPanelRef = useRef<HTMLDivElement | null>(null);
   const filesPanelRef = useRef<HTMLDivElement | null>(null);
 
@@ -390,7 +792,7 @@ export default function HomePage() {
   }
 
   async function handleCopy() {
-    if (!result-.url) return;
+    if (!result?.url) return;
     await navigator.clipboard.writeText(result.url);
     setCopied(true);
   }
@@ -422,6 +824,7 @@ export default function HomePage() {
       setFileError,
       setFileResult,
       setFileLinkToast,
+      setResumeState,
       upload: uploadActions
     });
   }
@@ -443,10 +846,10 @@ export default function HomePage() {
       if (fileMode === "quick") {
         await handleQuickUpload(file);
       } else {
-        await handleSecureUpload(file, useResume - resumeState : null);
+        await handleSecureUpload(file, useResume ? resumeState : null);
       }
     } catch (err) {
-      const message = err instanceof Error - err.message : "Upload failed.";
+      const message = err instanceof Error ? err.message : "Upload failed.";
       setFileError(message);
       setUploadError(message);
     }
@@ -515,8 +918,8 @@ type HomeLayoutProps = {
   shareKind: ShareKind;
   onShareKindChange: (kind: ShareKind) => void;
   panelHeight: number | null;
-  textPanelRef: React.RefObject<HTMLDivElement>;
-  filesPanelRef: React.RefObject<HTMLDivElement>;
+  textPanelRef: React.RefObject<HTMLDivElement | null>;
+  filesPanelRef: React.RefObject<HTMLDivElement | null>;
   paste: {
     mode: PasteMode;
     content: string;
@@ -571,7 +974,7 @@ function HomeLayout({
       <div
         className={clsx(
           "pointer-events-none fixed bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-full border border-tide-400/30 bg-ink-800/90 px-5 py-2.5 text-sm text-tide-300 shadow-glow-sm backdrop-blur transition-all duration-300",
-          toasts.fileCopied - "translate-y-0 opacity-100" : "translate-y-3 opacity-0"
+          toasts.fileCopied ? "translate-y-0 opacity-100" : "translate-y-3 opacity-0"
         )}
       >
         Link copied to clipboard
@@ -580,7 +983,7 @@ function HomeLayout({
       <div
         className={clsx(
           "pointer-events-none fixed bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-full border border-tide-400/30 bg-ink-800/90 px-5 py-2.5 text-sm text-tide-300 shadow-glow-sm backdrop-blur transition-all duration-300",
-          toasts.fileLinkToast && !toasts.fileCopied - "translate-y-0 opacity-100" : "translate-y-3 opacity-0"
+          toasts.fileLinkToast && !toasts.fileCopied ? "translate-y-0 opacity-100" : "translate-y-3 opacity-0"
         )}
       >
         Link created
@@ -589,7 +992,7 @@ function HomeLayout({
       <div
         className={clsx(
           "pointer-events-none fixed bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-full border border-tide-400/30 bg-ink-800/90 px-5 py-2.5 text-sm text-tide-300 shadow-glow-sm backdrop-blur transition-all duration-300",
-          toasts.copied - "translate-y-0 opacity-100" : "translate-y-3 opacity-0"
+          toasts.copied ? "translate-y-0 opacity-100" : "translate-y-3 opacity-0"
         )}
       >
         Link copied to clipboard
@@ -598,7 +1001,7 @@ function HomeLayout({
       <div
         className={clsx(
           "pointer-events-none fixed bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-full border border-tide-400/30 bg-ink-800/90 px-5 py-2.5 text-sm text-tide-300 shadow-glow-sm backdrop-blur transition-all duration-300",
-          toasts.linkToast && !toasts.copied - "translate-y-0 opacity-100" : "translate-y-3 opacity-0"
+          toasts.linkToast && !toasts.copied ? "translate-y-0 opacity-100" : "translate-y-3 opacity-0"
         )}
       >
         Link created
@@ -625,14 +1028,14 @@ function HomeLayout({
 
         <div
           className="relative transition-[height] duration-700 ease-[cubic-bezier(0.16,0.84,0.44,1)] will-change-[height]"
-          style={panelHeight - { height: `${panelHeight}px` } : undefined}
+          style={panelHeight ? { height: `${panelHeight}px` } : undefined}
         >
           <section
             ref={textPanelRef}
             className={clsx(
               "absolute inset-x-0 top-0 space-y-4 transition-[opacity,transform] duration-500 ease-[cubic-bezier(0.16,0.84,0.44,1)]",
               shareKind === "text"
-                - "opacity-100 translate-y-0 pointer-events-auto"
+                ? "opacity-100 translate-y-0 pointer-events-auto"
                 : "opacity-0 translate-y-1 pointer-events-none"
             )}
           >
@@ -656,7 +1059,7 @@ function HomeLayout({
             className={clsx(
               "absolute inset-x-0 top-0 space-y-4 transition-[opacity,transform] duration-500 ease-[cubic-bezier(0.16,0.84,0.44,1)]",
               shareKind === "files"
-                - "opacity-100 translate-y-0 pointer-events-auto"
+                ? "opacity-100 translate-y-0 pointer-events-auto"
                 : "opacity-0 translate-y-1 pointer-events-none"
             )}
           >
@@ -750,7 +1153,7 @@ function TextSharePanel({
           aria-hidden="true"
           className={clsx(
             "absolute inset-y-1 rounded-full bg-tide-500 transition-all duration-300 ease-in-out",
-            mode === "quick" - "left-1 right-[calc(50%+2px)]" : "left-[calc(50%+2px)] right-1"
+            mode === "quick" ? "left-1 right-[calc(50%+2px)]" : "left-[calc(50%+2px)] right-1"
           )}
         />
         {(["quick", "secure"] as PasteMode[]).map((option) => (
@@ -760,10 +1163,10 @@ function TextSharePanel({
             onClick={() => onModeChange(option)}
             className={clsx(
               "relative z-10 w-20 rounded-full py-2 text-center font-medium transition-colors duration-300",
-              mode === option - "text-ink-900" : "text-ink-200 hover:text-ink-100"
+              mode === option ? "text-ink-900" : "text-ink-200 hover:text-ink-100"
             )}
           >
-            {option === "quick" - "Quick" : "Secure"}
+            {option === "quick" ? "Quick" : "Secure"}
           </button>
         ))}
       </div>
@@ -778,20 +1181,20 @@ function TextSharePanel({
         />
         <div className="pointer-events-none absolute bottom-3 left-4 right-4 flex items-center justify-between text-xs">
           <span className="text-ink-600">{bytes.toLocaleString()} bytes</span>
-          <span className={bytes > MAX_PASTE_BYTES - "text-ember-300" : "text-ink-600"}>
+          <span className={bytes > MAX_PASTE_BYTES ? "text-ember-300" : "text-ink-600"}>
             512 KB max
           </span>
         </div>
       </div>
 
-      {error - (
+      {error ? (
         <div className="rounded-xl border border-ember-400/40 bg-ember-400/10 px-4 py-2 text-sm text-ember-300">
           {error}
         </div>
       ) : null}
 
       <p className="text-xs text-ink-200/60">
-        The message deletes itself after someone opens it â€“ one view, then it's gone forever.
+        The message deletes itself after someone opens it -- one view, then it's gone forever.
       </p>
 
       <div className="flex flex-wrap items-center gap-3">
@@ -802,23 +1205,23 @@ function TextSharePanel({
           className={clsx(
             "rounded-full px-6 py-3 text-sm font-semibold uppercase tracking-[0.35em] transition",
             loading
-              - "cursor-wait bg-ink-700 text-ink-500"
+              ? "cursor-wait bg-ink-700 text-ink-500"
               : "bg-tide-500 text-ink-900 hover:bg-tide-400"
           )}
         >
-          {loading - "Creating..." : "Create"}
+          {loading ? "Creating..." : "Create"}
         </button>
         <span className="text-xs text-ink-200/60">
           {mode === "secure"
-            - "Encrypted in your browser before it leaves â€“ only the recipient can decrypt it."
-            : "Encrypted on our servers â€“ only someone with the link can open it."}
+            ? "Encrypted in your browser before it leaves -- only the recipient can decrypt it."
+            : "Encrypted on our servers -- only someone with the link can open it."}
         </span>
       </div>
 
       <div
         className={clsx(
           "overflow-hidden transition-all duration-500 ease-in-out",
-          result - "max-h-48 opacity-100" : "max-h-0 opacity-0"
+          result ? "max-h-48 opacity-100" : "max-h-0 opacity-0"
         )}
       >
         {result && (
@@ -837,11 +1240,11 @@ function TextSharePanel({
                 className={clsx(
                   "shrink-0 rounded-full border px-4 py-2 text-xs uppercase tracking-[0.3em] transition",
                   copied
-                    - "border-tide-400/60 bg-tide-400/10 text-tide-300"
+                    ? "border-tide-400/60 bg-tide-400/10 text-tide-300"
                     : "border-tide-500/40 text-tide-300 hover:bg-tide-500/10"
                 )}
               >
-                {copied - "Copied!" : "Copy"}
+                {copied ? "Copied!" : "Copy"}
               </button>
             </div>
             <p className="text-xs text-ink-200/60">Burns after first read</p>
@@ -892,7 +1295,7 @@ function FileSharePanel({
           aria-hidden="true"
           className={clsx(
             "absolute inset-y-1 rounded-full bg-tide-500 transition-all duration-300 ease-in-out",
-            fileMode === "quick" - "left-1 right-[calc(50%+2px)]" : "left-[calc(50%+2px)] right-1"
+            fileMode === "quick" ? "left-1 right-[calc(50%+2px)]" : "left-[calc(50%+2px)] right-1"
           )}
         />
         {(["quick", "secure"] as FileMode[]).map((option) => (
@@ -902,10 +1305,10 @@ function FileSharePanel({
             onClick={() => onFileModeChange(option)}
             className={clsx(
               "relative z-10 w-20 rounded-full py-2 text-center font-medium transition-colors duration-300",
-              fileMode === option - "text-ink-900" : "text-ink-200 hover:text-ink-100"
+              fileMode === option ? "text-ink-900" : "text-ink-200 hover:text-ink-100"
             )}
           >
-            {option === "quick" - "Quick" : "Secure"}
+            {option === "quick" ? "Quick" : "Secure"}
           </button>
         ))}
       </div>
@@ -940,17 +1343,17 @@ function FileSharePanel({
           </div>
         </label>
         <p className="text-xs text-ink-200/60">
-          The file deletes itself after the first download â€“ and automatically after the time above, whichever comes first.
+          The file deletes itself after the first download -- and automatically after the time above, whichever comes first.
         </p>
       </div>
 
-      {resumeState - (
+      {resumeState ? (
         <div className="rounded-xl border border-tide-500/30 bg-tide-500/10 px-4 py-3 text-sm text-tide-200">
           Resume available for this file. Uploaded {resumeState.parts.length}/{resumeState.totalChunks} chunks.
         </div>
       ) : null}
 
-      {fileError - (
+      {fileError ? (
         <div className="rounded-xl border border-ember-400/40 bg-ember-400/10 px-4 py-2 text-sm text-ember-300">
           {fileError}
         </div>
@@ -963,30 +1366,30 @@ function FileSharePanel({
           className={clsx(
             "rounded-full px-6 py-3 text-sm font-semibold uppercase tracking-[0.35em] transition",
             isUploadBusy
-              - "cursor-wait bg-ink-700 text-ink-500"
+              ? "cursor-wait bg-ink-700 text-ink-500"
               : "bg-tide-500 text-ink-900 hover:bg-tide-400"
           )}
           disabled={isUploadBusy}
         >
-          {isUploadBusy - "Uploading..." : "Upload"}
+          {isUploadBusy ? "Uploading..." : "Upload"}
         </button>
-        {resumeState && fileMode === "secure" - (
+        {resumeState && fileMode === "secure" ? (
           <button
             type="button"
             onClick={() => onUpload(true)}
             className="rounded-full border border-tide-500/40 px-5 py-2 text-xs uppercase tracking-[0.3em] text-tide-300 hover:bg-tide-500/10 transition"
           >
-            {progress.status === "error" - "Retry" : "Resume"}
+            {progress.status === "error" ? "Retry" : "Resume"}
           </button>
         ) : null}
         <span className="text-xs text-ink-200/60">
           {fileMode === "secure"
-            - "Encrypted in your browser before it leaves â€“ only the recipient can decrypt it."
-            : "Encrypted on our servers â€“ only someone with the link can open it."}
+            ? "Encrypted in your browser before it leaves -- only the recipient can decrypt it."
+            : "Encrypted on our servers -- only someone with the link can open it."}
         </span>
       </div>
 
-      {progress.status !== "idle" - (
+      {progress.status !== "idle" ? (
         <section className="space-y-3 rounded-2xl border border-ink-700 bg-ink-900/60 p-4">
           <div className="flex items-center justify-between text-xs text-ink-200">
             <span className="uppercase tracking-[0.3em]">{progress.status}</span>
@@ -1005,7 +1408,7 @@ function FileSharePanel({
               {progress.uploadedChunks}/{progress.totalChunks} chunks
             </span>
           </div>
-          {progress.status === "error" && progress.errorMessage - (
+          {progress.status === "error" && progress.errorMessage ? (
             <div className="rounded-xl border border-ember-400/40 bg-ember-400/10 px-4 py-2 text-sm text-ember-300">
               {progress.errorMessage}
             </div>
@@ -1013,7 +1416,7 @@ function FileSharePanel({
         </section>
       ) : null}
 
-      {fileResult - (
+      {fileResult ? (
         <section className="space-y-3 rounded-2xl border border-ink-700 bg-ink-900/60 p-4">
           <p className="text-xs uppercase tracking-[0.35em] text-ink-200">Your link</p>
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
@@ -1029,11 +1432,11 @@ function FileSharePanel({
               className={clsx(
                 "shrink-0 rounded-full border px-4 py-2 text-xs uppercase tracking-[0.3em] transition",
                 fileCopied
-                  - "border-tide-400/60 bg-tide-400/10 text-tide-300"
+                  ? "border-tide-400/60 bg-tide-400/10 text-tide-300"
                   : "border-tide-500/40 text-tide-300 hover:bg-tide-500/10"
               )}
             >
-              {fileCopied - "Copied!" : "Copy"}
+              {fileCopied ? "Copied!" : "Copy"}
             </button>
           </div>
           <p className="text-xs text-ink-200/60">Burns after first download</p>

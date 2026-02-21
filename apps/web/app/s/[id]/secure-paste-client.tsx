@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useReducer } from "react";
 import Link from "next/link";
+import useSWR from "swr";
 import type { PasteRecord } from "@solun/shared";
 import { decrypt, importKey } from "../../../lib/crypto";
 
@@ -9,94 +10,143 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001";
 
 type LoadState = "idle" | "loading" | "ready" | "error";
 
+type SecureState = {
+  status: LoadState;
+  error: string | null;
+  ciphertext: string | null;
+  iv: string | null;
+  content: string | null;
+  burnAfterRead: boolean;
+  expiresAt: string | null;
+  awaitingConfirm: boolean;
+  key: string | null;
+};
+
+type SecureAction = {
+  type: "patch";
+  payload: Partial<SecureState>;
+};
+
+const initialState: SecureState = {
+  status: "idle",
+  error: null,
+  ciphertext: null,
+  iv: null,
+  content: null,
+  burnAfterRead: false,
+  expiresAt: null,
+  awaitingConfirm: false,
+  key: null
+};
+
+function reducer(state: SecureState, action: SecureAction): SecureState {
+  switch (action.type) {
+    case "patch":
+      return { ...state, ...action.payload };
+    default:
+      return state;
+  }
+}
+
 export default function SecurePasteClient({ id }: { id: string }) {
-  const [state, setState] = useState<LoadState>("idle");
-  const [error, setError] = useState<string | null>(null);
-  const [ciphertext, setCiphertext] = useState<string | null>(null);
-  const [iv, setIv] = useState<string | null>(null);
-  const [content, setContent] = useState<string | null>(null);
-  const [burnAfterRead, setBurnAfterRead] = useState(false);
-  const [expiresAt, setExpiresAt] = useState<string | null>(null);
-  const [awaitingConfirm, setAwaitingConfirm] = useState(false);
-  // Use a ref so handleReveal always has the current key without re-render races
-  const keyRef = useRef<string | null>(null);
+  const [state, dispatch] = useReducer(reducer, initialState);
 
   useEffect(() => {
     const fragment = window.location.hash.startsWith("#")
       ? window.location.hash.slice(1)
       : window.location.hash;
     const params = new URLSearchParams(fragment);
-    const key = params.get("key");
+    const keyValue = params.get("key");
 
-    if (!key) {
-      setError("Missing decryption key in URL.");
-      setState("error");
+    if (!keyValue) {
+      dispatch({
+        type: "patch",
+        payload: { error: "Missing decryption key in URL.", status: "error" }
+      });
       return;
     }
 
-    keyRef.current = key;
+    dispatch({ type: "patch", payload: { key: keyValue, error: null } });
+  }, []);
 
-    async function load(keyValue: string) {
-      setState("loading");
-      try {
-        const response = await fetch(`${API_URL}/api/paste/${id}`, { cache: "no-store" });
-        if (!response.ok) {
-          setError("Secret not found or expired.");
-          setState("error");
-          return;
-        }
-
-        const data = (await response.json()) as PasteRecord;
-        if (data.mode !== "secure") {
-          setError("This link is not a secure paste.");
-          setState("error");
-          return;
-        }
-
-        if (data.iv === null) {
-          setError("Missing IV for this secret.");
-          setState("error");
-          return;
-        }
-
-        setCiphertext(data.content);
-        setIv(data.iv);
-        setBurnAfterRead(data.burnAfterRead);
-        setExpiresAt(data.expiresAt ?? null);
-
-        if (data.burnAfterRead) {
-          setAwaitingConfirm(true);
-          setState("ready");
-          return;
-        }
-
-        await reveal(data.content, data.iv, keyValue);
-      } catch (err) {
-        setError("Failed to load secret.");
-        setState("error");
+  const { data, error: fetchError, isLoading } = useSWR<PasteRecord>(
+    state.key ? `${API_URL}/api/paste/${id}` : null,
+    async (url: string) => {
+      const response = await fetch(url, { cache: "no-store" });
+      if (!response.ok) {
+        throw new Error("Secret not found or expired.");
       }
+      return response.json() as Promise<PasteRecord>;
+    },
+    { revalidateOnFocus: false }
+  );
+
+  useEffect(() => {
+    if (!state.key) return;
+    if (isLoading) {
+      dispatch({ type: "patch", payload: { status: "loading", error: null } });
+      return;
+    }
+    if (fetchError) {
+      const message = fetchError instanceof Error ? fetchError.message : "Failed to load secret.";
+      dispatch({ type: "patch", payload: { error: message, status: "error" } });
+      return;
+    }
+    if (!data) return;
+    if (data.mode !== "secure") {
+      dispatch({
+        type: "patch",
+        payload: { error: "This link is not a secure paste.", status: "error" }
+      });
+      return;
+    }
+    if (data.iv === null) {
+      dispatch({
+        type: "patch",
+        payload: { error: "Missing IV for this secret.", status: "error" }
+      });
+      return;
     }
 
-    void load(key);
-  }, [id]);
+    const awaitingConfirm = data.burnAfterRead;
+    dispatch({
+      type: "patch",
+      payload: {
+        ciphertext: data.content,
+        iv: data.iv,
+        burnAfterRead: data.burnAfterRead,
+        expiresAt: data.expiresAt ?? null,
+        awaitingConfirm,
+        status: awaitingConfirm ? "ready" : "loading",
+        error: null
+      }
+    });
+
+    if (!awaitingConfirm && !state.content) {
+      void reveal(data.content, data.iv, state.key);
+    }
+  }, [data, fetchError, isLoading, state.content, state.key]);
 
   async function reveal(payload: string, ivValue: string, keyValue: string) {
     try {
       const cryptoKey = await importKey(keyValue);
       const decrypted = await decrypt(payload, ivValue, cryptoKey);
-      setContent(decrypted);
-      setAwaitingConfirm(false);
-      setState("ready");
+      dispatch({
+        type: "patch",
+        payload: { content: decrypted, awaitingConfirm: false, status: "ready", error: null }
+      });
     } catch (err) {
-      setError("Failed to decrypt. Check the link fragment.");
-      setState("error");
+      dispatch({
+        type: "patch",
+        payload: { error: "Failed to decrypt. Check the link fragment.", status: "error" }
+      });
     }
   }
 
   async function handleReveal() {
-    const keyValue = keyRef.current;
-    const currentCiphertext = ciphertext;
-    const currentIv = iv;
+    const keyValue = state.key;
+    const currentCiphertext = state.ciphertext;
+    const currentIv = state.iv;
     if (!currentCiphertext || !currentIv || !keyValue) return;
     await reveal(currentCiphertext, currentIv, keyValue);
   }
@@ -110,17 +160,17 @@ export default function SecurePasteClient({ id }: { id: string }) {
           <p className="text-ink-200">Decrypts locally in your browser. The server never sees the key.</p>
         </header>
 
-        {state === "loading" ? (
+        {state.status === "loading" ? (
           <p className="text-sm text-ink-200">Decrypting...</p>
         ) : null}
 
-        {state === "error" && error ? (
+        {state.status === "error" && state.error ? (
           <div className="rounded-xl border border-ember-400/40 bg-ember-400/10 px-4 py-2 text-sm text-ember-300">
-            {error}
+            {state.error}
           </div>
         ) : null}
 
-        {awaitingConfirm ? (
+        {state.awaitingConfirm ? (
           <div className="flex flex-col items-start gap-4">
             <p className="text-sm text-ink-200">This message will be gone after you read it.</p>
             <button
@@ -133,25 +183,25 @@ export default function SecurePasteClient({ id }: { id: string }) {
           </div>
         ) : null}
 
-        {content ? (
+        {state.content ? (
           <textarea
             readOnly
-            value={content}
+            value={state.content}
             rows={12}
             className="w-full resize-none rounded-2xl border border-ink-700 bg-ink-900/60 p-4 text-base text-ink-100"
           />
         ) : null}
 
-        {content && (
+        {state.content && (
           <div className="flex flex-wrap items-center gap-3 text-xs text-ink-400">
-            {burnAfterRead ? <span>This message has now been deleted.</span> : null}
-            {expiresAt ? (
-              <span>Expires: {new Date(expiresAt).toLocaleString()}</span>
+            {state.burnAfterRead ? <span>This message has now been deleted.</span> : null}
+            {state.expiresAt ? (
+              <span>Expires: {new Date(state.expiresAt).toLocaleString()}</span>
             ) : null}
           </div>
         )}
 
-        {(content || state === "error") && (
+        {(state.content || state.status === "error") && (
           <div className="border-t border-ink-700 pt-6">
             <Link
               href="/"

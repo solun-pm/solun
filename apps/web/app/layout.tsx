@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Script from "next/script";
 import { JetBrains_Mono, Space_Grotesk } from "next/font/google";
 import "./globals.css";
 
@@ -77,19 +78,22 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en" className={`${display.variable} ${mono.variable}`}>
       <body className="antialiased">
         {children}
-        <script
-          dangerouslySetInnerHTML={{
-            __html: `
-              // Remove preload class after DOM content loaded to enable transitions
-              document.body.classList.add('preload');
-              document.addEventListener('DOMContentLoaded', function() {
-                setTimeout(function() {
-                  document.body.classList.remove('preload');
-                }, 100);
-              });
-            `
-          }}
-        />
+        <Script id="preload-guard" strategy="afterInteractive">
+          {`
+            // Remove preload class after DOM content loaded to enable transitions
+            document.body.classList.add('preload');
+            var removePreload = function() {
+              setTimeout(function() {
+                document.body.classList.remove('preload');
+              }, 100);
+            };
+            if (document.readyState === 'loading') {
+              document.addEventListener('DOMContentLoaded', removePreload);
+            } else {
+              removePreload();
+            }
+          `}
+        </Script>
       </body>
     </html>
   );

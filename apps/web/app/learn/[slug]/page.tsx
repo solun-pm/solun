@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Script from "next/script";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { getArticle, learnArticles, learnSlugs } from "../content";
@@ -111,7 +112,9 @@ export default async function LearnArticlePage(props: { params: Promise<{ slug: 
           </Link>
         </div>
       </div>
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
+      <Script id="learn-article-jsonld" type="application/ld+json">
+        {JSON.stringify(jsonLd)}
+      </Script>
     </main>
   );
 }

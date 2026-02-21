@@ -1,7 +1,8 @@
 "use client";
 
 import clsx from "clsx";
-import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+import { useEffect, useMemo, useReducer } from "react";
 import type { FileMetadata } from "@solun/shared";
 import { decryptChunk } from "../../../lib/file-crypto";
 import { importKey } from "../../../lib/crypto";
@@ -23,6 +24,49 @@ type DownloadInfo = {
   fileKey: string | null;
 };
 
+type Availability = "checking" | "available" | "missing";
+type LoadState = "checking" | "exists" | "loading" | "ready" | "error" | "not-found";
+type FileState = {
+  error: string | null;
+  fileUrl: string | null;
+  fileInfo: DownloadInfo | null;
+  loading: boolean;
+  availability: Availability;
+  status: LoadState;
+};
+
+type FileAction = {
+  type: "patch";
+  payload: Partial<FileState>;
+};
+
+function reducer(state: FileState, action: FileAction): FileState {
+  switch (action.type) {
+    case "patch":
+      return { ...state, ...action.payload };
+    default:
+      return state;
+  }
+}
+
+function createInitialState(initialAvailability?: Availability): FileState {
+  const resolvedAvailability = initialAvailability ?? "checking";
+  const resolvedStatus: LoadState =
+    resolvedAvailability === "available"
+      ? "exists"
+      : resolvedAvailability === "missing"
+        ? "not-found"
+        : "checking";
+  return {
+    error: null,
+    fileUrl: null,
+    fileInfo: null,
+    loading: false,
+    availability: resolvedAvailability,
+    status: resolvedStatus
+  };
+}
+
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   const kb = bytes / 1024;
@@ -31,16 +75,14 @@ function formatBytes(bytes: number): string {
   return `${mb.toFixed(1)} MB`;
 }
 
-export default function FileDownloadClient({ id }: { id: string }) {
-  const [error, setError] = useState<string | null>(null);
-  const [fileUrl, setFileUrl] = useState<string | null>(null);
-  const [fileName, setFileName] = useState<string | null>(null);
-  const [fileInfo, setFileInfo] = useState<DownloadInfo | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [availability, setAvailability] = useState<"checking" | "available" | "missing">("checking");
-  const [state, setState] = useState<"checking" | "exists" | "loading" | "ready" | "error" | "not-found">(
-    "checking"
-  );
+export default function FileDownloadClient({
+  id,
+  initialAvailability
+}: {
+  id: string;
+  initialAvailability?: Availability;
+}) {
+  const [state, dispatch] = useReducer(reducer, initialAvailability, createInitialState);
 
   const {
     progress,
@@ -54,21 +96,19 @@ export default function FileDownloadClient({ id }: { id: string }) {
   } = useDownloadProgress();
 
   const statusText = useMemo(() => {
-    if (state === "checking") return "Checking...";
-    if (state === "exists") return "Ready to load.";
-    if (state === "loading") return "Loading file...";
-    if (state === "ready") return "Ready.";
-    if (state === "error") return "Something went wrong.";
-    if (state === "not-found") return "File not found.";
+    if (state.status === "checking") return "Checking...";
+    if (state.status === "exists") return "Ready to load.";
+    if (state.status === "loading") return "Loading file...";
+    if (state.status === "ready") return "Ready.";
+    if (state.status === "error") return "Something went wrong.";
+    if (state.status === "not-found") return "File not found.";
     return "";
-  }, [state]);
+  }, [state.status]);
 
   async function loadFile() {
-    if (loading) return;
-    setLoading(true);
+    if (state.loading) return;
     reset();
-    setError(null);
-    setState("loading");
+    dispatch({ type: "patch", payload: { loading: true, error: null, status: "loading" } });
 
     try {
       console.log("[download] start", { id, api: API_URL });
@@ -77,14 +117,13 @@ export default function FileDownloadClient({ id }: { id: string }) {
         if (response.status !== 404) {
           console.error("File metadata fetch failed:", response.status, response.statusText);
         }
-        setState("not-found");
-        throw new Error("File not found.");
+        dispatch({ type: "patch", payload: { status: "not-found", error: "File not found." } });
+        return;
       }
 
       const info = (await response.json()) as DownloadInfo;
       console.log("[download] info", info);
-      setFileInfo(info);
-      setFileName(info.originalName);
+      dispatch({ type: "patch", payload: { fileInfo: info } });
 
       const keyFromUrl = new URLSearchParams(window.location.hash.slice(1)).get("key");
       const keyValue = info.mode === "secure" ? keyFromUrl : info.fileKey;
@@ -143,9 +182,8 @@ export default function FileDownloadClient({ id }: { id: string }) {
       setAssembling();
       const blob = new Blob(chunks, { type: info.contentType });
       const url = URL.createObjectURL(blob);
-      setFileUrl(url);
+      dispatch({ type: "patch", payload: { fileUrl: url, status: "ready" } });
       setDone();
-      setState("ready");
       setTimeout(() => {
         const link = document.createElement("a");
         link.href = url;
@@ -156,61 +194,35 @@ export default function FileDownloadClient({ id }: { id: string }) {
       console.log("[download] done", { id });
     } catch (err) {
       const message = err instanceof Error ? err.message : "Failed to load file.";
-      setError(message);
       setProgressError(message);
       console.error("[download] error", message);
-      if (message === "File not found.") {
-        setState("not-found");
-      } else {
-        setState("error");
-      }
+      dispatch({
+        type: "patch",
+        payload: { error: message, status: message === "File not found." ? "not-found" : "error" }
+      });
     } finally {
-      setLoading(false);
+      dispatch({ type: "patch", payload: { loading: false } });
     }
   }
 
   useEffect(() => {
     return () => {
-      if (fileUrl) {
-        URL.revokeObjectURL(fileUrl);
+      if (state.fileUrl) {
+        URL.revokeObjectURL(state.fileUrl);
       }
     };
-  }, [fileUrl]);
+  }, [state.fileUrl]);
 
   async function handleDownload() {
-    if (!fileUrl || !fileName) return;
+    if (!state.fileUrl || !state.fileInfo?.originalName) return;
     const link = document.createElement("a");
-    link.href = fileUrl;
-    link.download = fileName;
+    link.href = state.fileUrl;
+    link.download = state.fileInfo.originalName;
     link.click();
 
     await fetch(`${API_URL}/api/files/${id}/downloaded`, { method: "POST" });
   }
 
-  useEffect(() => {
-    let cancelled = false;
-    async function checkExists() {
-      try {
-        const response = await fetch(`${API_URL}/api/files/${id}`, { method: "HEAD", cache: "no-store" });
-        if (cancelled) return;
-        if (response.ok) {
-          setAvailability("available");
-          setState("exists");
-        } else {
-          setAvailability("missing");
-          setState("not-found");
-        }
-      } catch {
-        if (cancelled) return;
-        setAvailability("missing");
-        setState("not-found");
-      }
-    }
-    void checkExists();
-    return () => {
-      cancelled = true;
-    };
-  }, [id]);
 
   return (
     <main className="flex min-h-screen items-start justify-center px-4 pt-10 pb-6">
@@ -218,30 +230,30 @@ export default function FileDownloadClient({ id }: { id: string }) {
         <header className="space-y-2">
           <p className="text-xs uppercase tracking-[0.4em] text-tide-300/70">Solun · File</p>
           <h1 className="text-3xl font-semibold tracking-tight text-ink-100">
-            {state === "not-found"
+            {state.status === "not-found"
               ? "File not found"
-              : state === "error"
+              : state.status === "error"
                 ? "Something went wrong"
                 : "You received a file"}
           </h1>
-          {(state === "exists" || state === "ready") && fileInfo ? (
+          {(state.status === "exists" || state.status === "ready") && state.fileInfo ? (
             <p className="text-sm text-ink-200">
-              {fileInfo.originalName} · {formatBytes(fileInfo.sizeBytes)} · {fileInfo.mode === "secure" ? "Secure" : "Quick"}
+              {state.fileInfo.originalName} · {formatBytes(state.fileInfo.sizeBytes)} · {state.fileInfo.mode === "secure" ? "Secure" : "Quick"}
             </p>
           ) : null}
         </header>
 
-        {state === "not-found" ? (
+        {state.status === "not-found" ? (
           <p className="text-sm text-ink-200">This file does not exist or has expired.</p>
         ) : null}
 
-        {error ? (
+        {state.error ? (
           <div className="rounded-xl border border-ember-400/40 bg-ember-400/10 px-4 py-2 text-sm text-ember-300">
-            {error}
+            {state.error}
           </div>
         ) : null}
 
-        {state !== "not-found" ? (
+        {state.status !== "not-found" ? (
           <section className="space-y-3 rounded-2xl border border-ink-700 bg-ink-900/60 p-4">
             <div className="flex items-center justify-between text-xs text-ink-200">
               <span className="uppercase tracking-[0.3em]">{statusText}</span>
@@ -264,27 +276,31 @@ export default function FileDownloadClient({ id }: { id: string }) {
         ) : null}
 
         <div className="flex flex-wrap items-center gap-3">
-          {state === "not-found" ? (
-            <a
+          {state.status === "not-found" ? (
+            <Link
               href="/"
               className="inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-tide-400 to-tide-600 px-5 py-2.5 text-sm font-medium text-white shadow-glow-sm transition hover:opacity-90"
             >
               <span>+</span>
               Create new file
-            </a>
-          ) : !fileUrl ? (
+            </Link>
+          ) : !state.fileUrl ? (
             <button
               type="button"
               onClick={loadFile}
-              disabled={loading || availability !== "available"}
+              disabled={state.loading || state.availability !== "available"}
               className={clsx(
                 "rounded-full px-6 py-3 text-sm font-semibold uppercase tracking-[0.35em] transition",
-                loading || availability !== "available"
+                state.loading || state.availability !== "available"
                   ? "cursor-wait bg-ink-700 text-ink-500"
                   : "bg-tide-500 text-ink-900 hover:bg-tide-400"
               )}
             >
-              {loading ? "Loading..." : availability === "checking" ? "Checking..." : "Load file"}
+              {state.loading
+                ? "Loading..."
+                : state.availability === "checking"
+                  ? "Checking..."
+                  : "Load file"}
             </button>
           ) : (
             <button
@@ -295,9 +311,9 @@ export default function FileDownloadClient({ id }: { id: string }) {
               Download
             </button>
           )}
-          {fileInfo?.expiresAt ? (
+          {state.fileInfo?.expiresAt ? (
             <span className="text-xs text-ink-200/60">
-              Expires: {new Date(fileInfo.expiresAt).toLocaleString()}
+              Expires: {new Date(state.fileInfo.expiresAt).toLocaleString()}
             </span>
           ) : null}
         </div>

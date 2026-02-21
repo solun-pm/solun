@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Script from "next/script";
 
 export const metadata = {
   title: "Solun Guide",
@@ -108,7 +109,9 @@ export default function LearnOverviewPage() {
           </Link>
         </div>
       </div>
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
+      <Script id="learn-overview-jsonld" type="application/ld+json">
+        {JSON.stringify(jsonLd)}
+      </Script>
     </main>
   );
 }

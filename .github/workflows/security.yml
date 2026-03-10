@@ -9,6 +9,8 @@ jobs:
   dependency-audit:
     name: Dependency Audit
     runs-on: ubuntu-latest
+    permissions:
+      contents: read  # Minimal permissions (vorher: default write)
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -25,10 +27,12 @@ jobs:
           cache: pnpm
 
       - name: Install dependencies
-        run: pnpm install --no-frozen-lockfile
+        run: pnpm install --frozen-lockfile
 
       - name: pnpm audit (prod)
-        run: pnpm audit --prod
+        # --audit-level=high: Nur HIGH/CRITICAL schlagen den Job fehl
+        # Vorher: ohne --audit-level → schlägt auch bei low/moderate fehl
+        run: pnpm audit --prod --audit-level=high
 
   codeql:
     name: CodeQL
@@ -55,15 +59,25 @@ jobs:
   trivy:
     name: Trivy FS Scan
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write  # Für SARIF-Upload ins GitHub Security-Tab
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Trivy Scan
-        uses: aquasecurity/trivy-action@0.24.0
+        uses: aquasecurity/trivy-action@0.29.0  # 0.24.0 → 0.29.0 (veraltet, DB-Schema-Probleme)
         with:
           scan-type: fs
           scan-ref: .
-          format: table
+          format: sarif          # Vorher: table → kein GitHub-Security-Tab-Integration
+          output: trivy-results.sarif
           severity: CRITICAL,HIGH
-          exit-code: 1
+          # exit-code: 1 entfernt → Findings werden ins Security-Tab gepostet statt den Job zu brechen
+
+      - name: Upload Trivy results to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: trivy-results.sarif

@@ -4,6 +4,8 @@ on:
   workflow_run:
     workflows: ["Full CI"]
     types: [completed]
+    # Nur wenn der auslösende Full-CI-Run ein Tag-Push war
+    branches-ignore: ["**"]  # ignoriert Branch-Runs; Tags fallen nicht unter "branches"
 
 jobs:
   create-release:
@@ -11,7 +13,9 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
-    if: github.event.workflow_run.conclusion == 'success' && startsWith(github.event.workflow_run.ref, 'refs/tags/v')
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      startsWith(github.event.workflow_run.ref, 'refs/tags/v')
 
     steps:
       - name: Checkout repository

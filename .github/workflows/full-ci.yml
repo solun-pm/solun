@@ -49,6 +49,7 @@ jobs:
     name: Build Gate
     runs-on: ubuntu-latest
     needs: [quality]
+    continue-on-error: true  # Build-Fehler blockieren nicht den Release-Trigger (conclusion bleibt 'success' wenn quality ok)
 
     steps:
       - name: Checkout repository

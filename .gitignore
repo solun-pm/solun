@@ -20,6 +20,8 @@ coverage
 !.claude/settings.json
 !.claude/hooks/
 
+node-compile-cache
+
 # Windows artifacts
 nul
 package-lock.json

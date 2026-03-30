@@ -8,6 +8,7 @@ import helmet from "helmet";
 import { customAlphabet } from "nanoid";
 import cron from "node-cron";
 import { PrismaClient } from "@prisma/client";
+import { PrismaPg } from "@prisma/adapter-pg";
 import { z } from "zod";
 import {
   FILE_CHUNK_SIZE,
@@ -126,7 +127,8 @@ function decryptFileKey(stored: string): Buffer {
   return Buffer.concat([decipher.update(data), decipher.final()]);
 }
 
-const prisma = new PrismaClient();
+const adapter = new PrismaPg(process.env.DATABASE_URL!);
+const prisma = new PrismaClient({ adapter });
 
 const app = express();
 app.disable("x-powered-by");

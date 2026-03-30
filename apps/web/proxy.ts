@@ -5,7 +5,7 @@ import type { NextRequest } from "next/server";
  * Security headers middleware for Solun
  * Implements critical security headers for a privacy-focused application
  */
-export function middleware(request: NextRequest) {
+export function proxy(request: NextRequest) {
   const response = NextResponse.next();
 
   // Strict-Transport-Security (HSTS)

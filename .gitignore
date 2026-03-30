@@ -16,7 +16,9 @@ coverage
 .env.production.local
 .env.*.local
 
-.claude
+.claude/*
+!.claude/settings.json
+!.claude/hooks/
 
 # Windows artifacts
 nul

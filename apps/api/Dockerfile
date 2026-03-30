@@ -18,4 +18,4 @@ RUN pnpm --filter @solun/api exec prisma generate
 RUN pnpm --filter @solun/api build
 
 # Run db push (idempotent schema sync) before starting the server
-CMD ["sh", "-c", "pnpm --filter @solun/api exec prisma db push --skip-generate && pnpm --filter @solun/api start"]
+CMD ["sh", "-c", "pnpm --filter @solun/api exec prisma db push && pnpm --filter @solun/api start"]

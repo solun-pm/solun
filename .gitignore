@@ -16,7 +16,11 @@ coverage
 .env.production.local
 .env.*.local
 
-.claude
+.claude/*
+!.claude/settings.json
+!.claude/hooks/
+
+node-compile-cache
 
 # Windows artifacts
 nul

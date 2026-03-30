@@ -1,6 +1,7 @@
 import dotenv from "dotenv";
 import { z } from "zod";
 import { PrismaClient } from "@prisma/client";
+import { PrismaPg } from "@prisma/adapter-pg";
 import { S3Client } from "@aws-sdk/client-s3";
 import { runFileCleanup } from "./file-cleanup.js";
 
@@ -24,7 +25,8 @@ const env = envSchema.parse({
   R2_REGION: process.env.R2_REGION ?? "auto"
 });
 
-const prisma = new PrismaClient();
+const adapter = new PrismaPg(process.env.DATABASE_URL!);
+const prisma = new PrismaClient({ adapter });
 const r2Client = new S3Client({
   region: env.R2_REGION,
   endpoint: env.R2_ENDPOINT,

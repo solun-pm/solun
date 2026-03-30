@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useReducer } from "react";
+import { useCallback, useEffect, useReducer, useState } from "react";
 import Link from "next/link";
 import useSWR from "swr";
 import type { PasteRecord } from "@solun/shared";
@@ -50,6 +50,14 @@ function reducer(state: SecureState, action: SecureAction): SecureState {
 
 export default function SecurePasteClient({ id }: { id: string }) {
   const [state, dispatch] = useReducer(reducer, initialState);
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = useCallback(async () => {
+    if (!state.content) return;
+    await navigator.clipboard.writeText(state.content);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }, [state.content]);
 
   useEffect(() => {
     const fragment = window.location.hash.startsWith("#")
@@ -184,12 +192,26 @@ export default function SecurePasteClient({ id }: { id: string }) {
         ) : null}
 
         {state.content ? (
-          <textarea
-            readOnly
-            value={state.content}
-            rows={12}
-            className="w-full resize-none rounded-2xl border border-ink-700 bg-ink-900/60 p-4 text-base text-ink-100"
-          />
+          <div className="relative">
+            <textarea
+              readOnly
+              value={state.content}
+              rows={12}
+              className="w-full resize-none rounded-2xl border border-ink-700 bg-ink-900/60 p-4 pr-12 text-base text-ink-100"
+            />
+            <button
+              type="button"
+              onClick={handleCopy}
+              className="absolute top-3 right-3 rounded-lg p-1.5 text-ink-400 transition hover:bg-ink-700 hover:text-ink-100"
+              title={copied ? "Copied!" : "Copy message"}
+            >
+              {copied ? (
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5" /></svg>
+              ) : (
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" /><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" /></svg>
+              )}
+            </button>
+          </div>
         ) : null}
 
         {state.content && (

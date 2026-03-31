@@ -26,6 +26,10 @@ export default function sitemap(): MetadataRoute.Sitemap {
       url: `${siteUrl}/roadmap`,
       lastModified: new Date()
     },
+    {
+      url: `${siteUrl}/ip`,
+      lastModified: new Date()
+    },
     ...learnEntries
   ];
 }

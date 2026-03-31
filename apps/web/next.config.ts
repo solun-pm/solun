@@ -1,5 +1,6 @@
 const nextConfig = {
-  transpilePackages: ["@solun/shared"]
+  transpilePackages: ["@solun/shared"],
+  serverExternalPackages: ["geoip-lite"]
 };
 
 export default nextConfig;

@@ -1082,7 +1082,7 @@ function HomeLayout({
           </section>
         </div>
 
-        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-ink-700 pt-6 text-xs text-ink-200/70">
+        <div className="relative z-10 flex flex-wrap items-center justify-between gap-3 border-t border-ink-700 pt-6 text-xs text-ink-200/70">
           <span>Made with love by the Solun team</span>
           <div className="flex items-center gap-4">
             <Link href="/learn" className="text-tide-300 hover:text-tide-200 transition">

@@ -2,61 +2,42 @@ import { headers } from "next/headers";
 import Link from "next/link";
 import Script from "next/script";
 import geoip from "geoip-lite";
+import { getIpFromHeaders, getIpVersion, extractGeo } from "../../lib/ip";
+import DualStack from "./dual-stack";
 
 export const dynamic = "force-dynamic";
 
 export const metadata = {
   title: "Your IP Address",
   description:
-    "See your IP address and approximate location. All lookups are local — no data leaves the server.",
+    "See your IPv4 and IPv6 addresses and approximate location. All lookups are local — no data leaves the server.",
   alternates: {
     canonical: "https://solun.pm/ip",
   },
   openGraph: {
     title: "Your IP Address · Solun",
     description:
-      "See your IP address and approximate location, looked up entirely server-side.",
+      "See your IPv4 and IPv6 addresses, looked up entirely server-side.",
     url: "https://solun.pm/ip",
     type: "website" as const,
   },
 };
 
-function getIpFromHeaders(headersList: Headers): string {
-  const forwarded = headersList.get("x-forwarded-for");
-  if (forwarded) {
-    return forwarded.split(",")[0]!.trim();
-  }
-  return headersList.get("x-real-ip") ?? "unknown";
-}
-
 export default async function IpPage() {
   const headersList = await headers();
   const ip = getIpFromHeaders(headersList);
-  const version = ip.includes(":") ? 6 : 4;
-  const geo = geoip.lookup(ip);
+  const version = getIpVersion(ip);
+  const geo = extractGeo(geoip.lookup(ip));
 
   const jsonLd = {
     "@context": "https://schema.org",
     "@type": "WebPage",
     name: "Your IP Address",
     description:
-      "View your IP address and approximate location with a privacy-first lookup.",
+      "View your IPv4 and IPv6 addresses with a privacy-first lookup.",
     url: "https://solun.pm/ip",
     publisher: { "@type": "Organization", name: "Solun" },
   };
-
-  const locationRows = geo
-    ? [
-        { label: "City", value: geo.city || "—" },
-        { label: "Region", value: geo.region || "—" },
-        { label: "Country", value: geo.country || "—" },
-        { label: "Timezone", value: geo.timezone || "—" },
-        {
-          label: "Coordinates",
-          value: geo.ll ? `${geo.ll[0]}, ${geo.ll[1]}` : "—",
-        },
-      ]
-    : null;
 
   return (
     <main className="flex min-h-screen items-center justify-center px-4 py-10">
@@ -69,43 +50,24 @@ export default async function IpPage() {
             Your IP Address
           </h1>
           <p className="text-sm text-ink-200">
-            This is the address your device used to connect. The location is
-            looked up from a local database — nothing leaves the server.
+            These are the addresses your device used to connect. All lookups
+            are local — nothing leaves the server.
           </p>
         </header>
 
-        <section className="space-y-4 rounded-2xl border border-ink-700 bg-ink-900/60 p-6">
-          <div className="flex items-center gap-3">
-            <span className="font-mono text-2xl font-semibold text-ink-100 break-all">
-              {ip}
-            </span>
-            <span className="rounded-full bg-tide-300/15 px-2.5 py-0.5 text-xs font-medium text-tide-300">
-              IPv{version}
-            </span>
-          </div>
-        </section>
+        <DualStack serverIp={{ ip, version, geo }} />
 
-        {locationRows ? (
-          <section className="space-y-3 rounded-2xl border border-ink-700 bg-ink-900/60 p-6">
-            <h2 className="text-sm uppercase tracking-[0.3em] text-tide-300/80">
-              Location
-            </h2>
-            <dl className="grid grid-cols-2 gap-x-6 gap-y-3 text-sm">
-              {locationRows.map((row) => (
-                <div key={row.label}>
-                  <dt className="text-ink-400">{row.label}</dt>
-                  <dd className="font-medium text-ink-100">{row.value}</dd>
-                </div>
-              ))}
-            </dl>
-          </section>
-        ) : (
-          <section className="rounded-2xl border border-ink-700 bg-ink-900/60 p-6">
-            <p className="text-sm text-ink-400">
-              Location data is not available for this IP address.
-            </p>
-          </section>
-        )}
+        <section className="space-y-4 rounded-2xl border border-ink-700 bg-ink-900/60 p-6">
+          <h2 className="text-sm uppercase tracking-[0.3em] text-tide-300/80">
+            Terminal
+          </h2>
+          <p className="text-sm text-ink-200">
+            You can also check your IP from the command line:
+          </p>
+          <pre className="rounded-xl bg-ink-950 px-4 py-3 font-mono text-sm text-tide-300 select-all">
+            curl solun.pm/ip
+          </pre>
+        </section>
 
         <section className="space-y-3 border-t border-ink-700 pt-6 text-sm text-ink-200">
           <Link

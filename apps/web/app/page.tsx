@@ -1091,6 +1091,9 @@ function HomeLayout({
             <Link href="/roadmap" className="text-tide-300 hover:text-tide-200 transition">
               Roadmap
             </Link>
+            <Link href="/ip" className="text-tide-300 hover:text-tide-200 transition">
+              IP
+            </Link>
             <a
               href="https://github.com/solun-pm/solun"
               className="inline-flex items-center gap-2 text-tide-300 hover:text-tide-200 transition"

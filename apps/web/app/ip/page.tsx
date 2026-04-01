@@ -65,7 +65,7 @@ export default async function IpPage() {
             You can also check your IP from the command line:
           </p>
           <pre className="rounded-xl bg-ink-950 px-4 py-3 font-mono text-sm text-tide-300 select-all">
-            curl solun.pm/ip
+curl https://solun.pm/ip
           </pre>
         </section>
 

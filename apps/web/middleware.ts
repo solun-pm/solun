@@ -89,17 +89,28 @@ function applySecurityHeaders(response: NextResponse): void {
   response.headers.set("Content-Security-Policy", csp);
 }
 
+function getIpFromRequest(request: NextRequest): string {
+  const forwarded = request.headers.get("x-forwarded-for");
+  if (forwarded) {
+    return forwarded.split(",")[0]!.trim();
+  }
+  return request.headers.get("x-real-ip") ?? "unknown";
+}
+
 export function middleware(request: NextRequest) {
-  // Rewrite CLI requests to /ip → /api/ip with plain-text format
+  // Return plain-text IP directly for CLI clients hitting /ip
   if (request.nextUrl.pathname === "/ip") {
     const ua = request.headers.get("user-agent") ?? "";
     if (CLI_PATTERN.test(ua)) {
-      const url = request.nextUrl.clone();
-      url.pathname = "/api/ip";
-      url.searchParams.set("format", "text");
-      const response = NextResponse.rewrite(url);
-      applySecurityHeaders(response);
-      return response;
+      const ip = getIpFromRequest(request);
+      const version = ip.includes(":") ? 6 : 4;
+      const body = `${ip}\n`;
+      return new NextResponse(body, {
+        headers: {
+          "Content-Type": "text/plain; charset=utf-8",
+          "X-IP-Version": `IPv${version}`,
+        },
+      });
     }
   }
 

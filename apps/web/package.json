@@ -16,7 +16,7 @@
     "@solun/shared": "workspace:*",
     "clsx": "^2.1.1",
     "geoip-lite": "^2.0.1",
-    "next": "16.2.1",
+    "next": "16.2.2",
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "swr": "^2.4.1",
@@ -25,7 +25,7 @@
   "devDependencies": {
     "@tailwindcss/postcss": "^4.2.2",
     "@types/geoip-lite": "^1.4.4",
-    "@types/node": "^25.5.0",
+    "@types/node": "^25.5.2",
     "@types/react": "^19.0.2",
     "@types/react-dom": "^19.0.2",
     "autoprefixer": "^10.4.27",

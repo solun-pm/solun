@@ -19,7 +19,7 @@
   },
   "devDependencies": {
     "react-doctor": "latest",
-    "turbo": "^2.8.21",
+    "turbo": "^2.9.4",
     "typescript": "^6.0.2"
   }
 }

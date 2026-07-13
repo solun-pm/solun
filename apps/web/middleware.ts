@@ -4,19 +4,29 @@ import type { NextRequest } from "next/server";
 const CLI_PATTERN =
   /^(curl|Wget|HTTPie|httpie|fetch|libcurl|python-requests|Go-http-client|PowerShell|aria2)/i;
 
-function applySecurityHeaders(response: NextResponse): void {
-  response.headers.set(
+function generateNonce(): string {
+  const bytes = new Uint8Array(16);
+  crypto.getRandomValues(bytes);
+  let binary = "";
+  for (const b of bytes) binary += String.fromCharCode(b);
+  return btoa(binary);
+}
+
+function applyStaticSecurityHeaders(headers: Headers): void {
+  headers.set(
     "Strict-Transport-Security",
     "max-age=31536000; includeSubDomains; preload",
   );
-  response.headers.set("X-Frame-Options", "DENY");
-  response.headers.set("X-Content-Type-Options", "nosniff");
-  response.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
-  response.headers.set(
+  headers.set("X-Frame-Options", "DENY");
+  headers.set("X-Content-Type-Options", "nosniff");
+  headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
+  headers.set(
     "Permissions-Policy",
     "geolocation=(), microphone=(), camera=()",
   );
+}
 
+function buildCsp(nonce: string): string {
   const connectSources = new Set<string>(["'self'"]);
 
   const apiUrl = process.env.NEXT_PUBLIC_API_URL;
@@ -76,17 +86,27 @@ function applySecurityHeaders(response: NextResponse): void {
   connectSources.add("https://v4.solun.pm");
   connectSources.add("https://v6.solun.pm");
 
+  // In production, lock scripts to a per-request nonce plus 'strict-dynamic'
+  // (so nonce'd Next.js bootstrap scripts may load their own chunks) and drop
+  // 'unsafe-inline'/'unsafe-eval'. Dev keeps them because Next.js HMR uses eval.
+  const isProd = process.env.NODE_ENV === "production";
+  const scriptSrc = isProd
+    ? `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'`
+    : "script-src 'self' 'unsafe-inline' 'unsafe-eval'";
+
   const csp = [
     "default-src 'self'",
-    "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
+    scriptSrc,
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data: https:",
     "font-src 'self' data:",
+    "object-src 'none'",
+    "base-uri 'self'",
     `connect-src ${Array.from(connectSources).join(" ")}`,
     "frame-ancestors 'none'",
   ].join("; ");
 
-  response.headers.set("Content-Security-Policy", csp);
+  return csp;
 }
 
 function getIpFromRequest(request: NextRequest): string {
@@ -114,8 +134,19 @@ export function middleware(request: NextRequest) {
     }
   }
 
-  const response = NextResponse.next();
-  applySecurityHeaders(response);
+  // Propagate a per-request nonce so server components can stamp inline scripts.
+  // Next.js reads the nonce from the CSP on the *request* headers to apply it to
+  // its own bootstrap scripts, so the CSP is set on both request and response —
+  // and must be finalized on requestHeaders before NextResponse.next().
+  const nonce = generateNonce();
+  const csp = buildCsp(nonce);
+  const requestHeaders = new Headers(request.headers);
+  requestHeaders.set("x-nonce", nonce);
+  requestHeaders.set("Content-Security-Policy", csp);
+
+  const response = NextResponse.next({ request: { headers: requestHeaders } });
+  applyStaticSecurityHeaders(response.headers);
+  response.headers.set("Content-Security-Policy", csp);
   return response;
 }
 

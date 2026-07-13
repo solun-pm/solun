@@ -7,14 +7,16 @@ datasource db {
 }
 
 model Paste {
-  id            String   @id @default(cuid())
-  shortId       String   @unique
-  content       String   @db.Text
-  mode          String
-  iv            String?
-  burnAfterRead Boolean  @default(false)
-  expiresAt     DateTime?
-  createdAt     DateTime @default(now())
+  id              String   @id @default(cuid())
+  shortId         String   @unique
+  content         String   @db.Text
+  mode            String
+  iv              String?
+  burnAfterRead   Boolean  @default(false)
+  // SHA-256 hash of the creator-only deletion token; required to DELETE.
+  deleteTokenHash String?
+  expiresAt       DateTime?
+  createdAt       DateTime @default(now())
 }
 
 model SharedFile {
@@ -29,6 +31,8 @@ model SharedFile {
   metadataKey   String
   uploadId      String?
   encryptedKey  String?
+  // SHA-256 hash of the creator-only deletion token; required to DELETE.
+  deleteTokenHash String?
   downloadCount Int      @default(0)
   maxDownloads  Int?
   expiresAt     DateTime

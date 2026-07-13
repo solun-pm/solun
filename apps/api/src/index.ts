@@ -1,6 +1,6 @@
 import cors from "cors";
 import Busboy from "busboy";
-import { createCipheriv, createDecipheriv, randomBytes } from "crypto";
+import { createCipheriv, createDecipheriv, hkdfSync, randomBytes, timingSafeEqual, createHash } from "crypto";
 import dotenv from "dotenv";
 import express from "express";
 import rateLimit from "express-rate-limit";
@@ -17,7 +17,7 @@ import {
   createFileInitSchema,
   createPasteSchema,
   fileCompleteSchema,
-  fileMetadataSchema,
+  fileMetadataRequestSchema,
   filePresignSchema,
   pasteRecordSchema,
   type FileMetadata
@@ -64,8 +64,44 @@ const env = envSchema.parse({
   EXTRA_ORIGINS: process.env.EXTRA_ORIGINS
 });
 
-// Derive a 32-byte key from the secret (truncate or pad to exactly 32 bytes)
-const encryptionKey = Buffer.from(env.ENCRYPTION_SECRET.padEnd(32, "0").slice(0, 32), "utf8");
+// Reject secrets that pass the length check but carry no real entropy: the
+// shipped .env.example placeholders and degenerate single-char strings. Without
+// this, an operator who forgets to set ENCRYPTION_SECRET gets a publicly known
+// server key with no warning.
+function assertSecretIsStrong(secret: string): void {
+  const placeholders = [
+    "change-me-to-a-random-64-char-hex-string",
+    "change-me-to-a-random-32-char-secret-key"
+  ];
+  const normalized = secret.trim().toLowerCase();
+  const distinctChars = new Set(secret).size;
+  if (placeholders.includes(normalized) || normalized.startsWith("change-me")) {
+    throw new Error(
+      "ENCRYPTION_SECRET is still set to the example placeholder. Generate a real secret: node -e \"console.log(require('crypto').randomBytes(32).toString('hex'))\""
+    );
+  }
+  if (distinctChars < 8) {
+    throw new Error(
+      "ENCRYPTION_SECRET has too little entropy (fewer than 8 distinct characters). Use a random 64-char hex secret."
+    );
+  }
+}
+assertSecretIsStrong(env.ENCRYPTION_SECRET);
+
+// Derive a 32-byte AES-256 key from the full secret via HKDF-SHA-256.
+// Using the raw secret bytes directly would discard entropy (a hex secret only
+// carries 4 bits/char) and pad short secrets with predictable zeros. HKDF over
+// the entire secret consumes all available entropy and yields a full-strength
+// key, which is what keeps the post-quantum (Grover) margin at ~128 bits.
+const encryptionKey = Buffer.from(
+  hkdfSync(
+    "sha256",
+    Buffer.from(env.ENCRYPTION_SECRET, "utf8"),
+    Buffer.from("solun-static-salt-v1", "utf8"),
+    Buffer.from("solun-quick-aes-256-gcm", "utf8"),
+    32
+  )
+);
 const FILE_UPLOAD_PART_SIZE = FILE_CHUNK_SIZE;
 const FILE_UPLOAD_MAX_BYTES = MAX_FILE_BYTES;
 const FILE_METADATA_SUFFIX = "metadata.json";
@@ -93,8 +129,9 @@ function encryptContent(plaintext: string): string {
 function decryptContent(stored: string): string {
   const parts = stored.split(":");
   if (parts.length !== 3) {
-    // Not encrypted (legacy plain text), return as-is
-    return stored;
+    // A Quick paste is always written by encryptContent (iv:tag:ciphertext).
+    // Anything else is malformed/tampered and must never be served in the clear.
+    throw new Error("Invalid encrypted content payload.");
   }
   const [ivB64, tagB64, dataB64] = parts;
   const iv = Buffer.from(ivB64, "base64");
@@ -127,6 +164,30 @@ function decryptFileKey(stored: string): Buffer {
   return Buffer.concat([decipher.update(data), decipher.final()]);
 }
 
+// Deletion tokens: a random capability handed only to the creator so that an
+// unauthenticated party who merely learns a short id cannot delete the record.
+function generateDeleteToken(): { token: string; hash: string } {
+  const token = randomBytes(24).toString("base64url");
+  const hash = createHash("sha256").update(token).digest("hex");
+  return { token, hash };
+}
+
+function deleteTokenMatches(provided: string | undefined, storedHash: string | null): boolean {
+  if (!provided || !storedHash) return false;
+  const providedHash = createHash("sha256").update(provided).digest("hex");
+  const a = Buffer.from(providedHash, "hex");
+  const b = Buffer.from(storedHash, "hex");
+  if (a.length !== b.length) return false;
+  return timingSafeEqual(a, b);
+}
+
+function readDeleteToken(req: express.Request): string | undefined {
+  const header = req.header("x-delete-token");
+  if (typeof header === "string" && header.length > 0) return header;
+  const q = req.query.token;
+  return typeof q === "string" && q.length > 0 ? q : undefined;
+}
+
 const adapter = new PrismaPg(process.env.DATABASE_URL!);
 const prisma = new PrismaClient({ adapter });
 
@@ -135,6 +196,7 @@ app.set("trust proxy", 1);
 app.disable("x-powered-by");
 
 app.use(helmet());
+const isProduction = process.env.NODE_ENV === "production";
 const allowedOrigins = [
   env.FRONTEND_URL,
   ...(env.EXTRA_ORIGINS ? env.EXTRA_ORIGINS.split(",").map((o) => o.trim()) : [])
@@ -145,8 +207,9 @@ app.use(
     origin: (origin, callback) => {
       // Allow requests with no origin (e.g. server-to-server, curl)
       if (!origin) return callback(null, true);
-      // Allow localhost during development without needing CORS config
-      if (/^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) {
+      // Allow localhost only outside production, so a prod deployment doesn't
+      // trust arbitrary localhost:<port> origins.
+      if (!isProduction && /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) {
         return callback(null, true);
       }
       if (allowedOrigins.includes(origin)) return callback(null, true);
@@ -179,10 +242,21 @@ const fileLimiter = rateLimit({
   legacyHeaders: false
 });
 
+// Throttle read/HEAD/DELETE by id. Without this, short ids can be enumerated
+// (brute-forced) to harvest encrypted-at-rest Quick content or grief-delete.
+const readLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 60,
+  standardHeaders: true,
+  legacyHeaders: false
+});
+
 const alphabet = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
-const nanoidQuick = customAlphabet(alphabet, 5);
+// 8 chars over a 62-char alphabet ≈ 47.6 bits, large enough that enumeration is
+// infeasible even with the read limiter as a second line of defense.
+const nanoidQuick = customAlphabet(alphabet, 8);
 const nanoidSecure = customAlphabet(alphabet, 8);
-const nanoidFileQuick = customAlphabet(alphabet, 5);
+const nanoidFileQuick = customAlphabet(alphabet, 8);
 const nanoidFileSecure = customAlphabet(alphabet, 10);
 
 function isExpired(expiresAt: Date | null, now = new Date()): boolean {
@@ -348,6 +422,8 @@ app.post("/api/paste", limiter, async (req, res) => {
     const storedContent =
       payload.mode === "quick" ? encryptContent(payload.content) : payload.content;
 
+    const { token: deleteToken, hash: deleteTokenHash } = generateDeleteToken();
+
     const record = await prisma.paste.create({
       data: {
         shortId,
@@ -355,6 +431,7 @@ app.post("/api/paste", limiter, async (req, res) => {
         mode: payload.mode,
         iv: payload.mode === "secure" ? payload.iv ?? null : null,
         burnAfterRead,
+        deleteTokenHash,
         expiresAt
       }
     });
@@ -362,6 +439,7 @@ app.post("/api/paste", limiter, async (req, res) => {
     return res.status(201).json({
       id: record.shortId,
       mode: record.mode,
+      deleteToken,
       expiresAt: record.expiresAt ? record.expiresAt.toISOString() : null
     });
   } catch (error) {
@@ -374,9 +452,9 @@ app.post("/api/paste", limiter, async (req, res) => {
 });
 
 // HEAD /api/paste/:id — check existence without reading or deleting
-app.head("/api/paste/:id", async (req, res) => {
+app.head("/api/paste/:id", readLimiter, async (req, res) => {
   try {
-    const { id } = req.params;
+    const { id } = req.params as { id: string };
     const paste = await prisma.paste.findUnique({
       where: { shortId: id },
       select: { shortId: true, expiresAt: true }
@@ -390,24 +468,34 @@ app.head("/api/paste/:id", async (req, res) => {
   }
 });
 
-app.get("/api/paste/:id", async (req, res) => {
+app.get("/api/paste/:id", readLimiter, async (req, res) => {
   try {
-    const { id } = req.params;
-    const paste = await prisma.paste.findUnique({
+    const { id } = req.params as { id: string };
+    const existing = await prisma.paste.findUnique({
       where: { shortId: id }
     });
 
-    if (!paste) {
+    if (!existing) {
       return res.status(404).json({ error: "Not found." });
     }
 
-    if (isExpired(paste.expiresAt)) {
+    if (isExpired(existing.expiresAt)) {
       await prisma.paste.delete({ where: { shortId: id } }).catch(() => undefined);
       return res.status(404).json({ error: "Not found." });
     }
 
-    if (paste.burnAfterRead) {
-      await prisma.paste.delete({ where: { shortId: id } }).catch(() => undefined);
+    // For burn-after-read, the read and the delete MUST be atomic. A plain
+    // findUnique + delete lets two concurrent readers both see the row before
+    // either delete runs, leaking the paste twice. prisma.delete performs a
+    // single `DELETE ... WHERE shortId = ?`; only one concurrent request
+    // deletes the row and receives it, every other request throws P2025 → 404.
+    let paste = existing;
+    if (existing.burnAfterRead) {
+      try {
+        paste = await prisma.paste.delete({ where: { shortId: id } });
+      } catch {
+        return res.status(404).json({ error: "Not found." });
+      }
     }
 
     // Quick pastes are stored encrypted at rest; decrypt before sending to client.
@@ -441,8 +529,20 @@ app.get("/api/paste/:id", async (req, res) => {
   }
 });
 
-app.delete("/api/paste/:id", async (req, res) => {
-  const { id } = req.params;
+app.delete("/api/paste/:id", readLimiter, async (req, res) => {
+  const { id } = req.params as { id: string };
+  const record = await prisma.paste.findUnique({
+    where: { shortId: id },
+    select: { shortId: true, deleteTokenHash: true }
+  });
+  // Respond 204 whether or not the row exists, so a caller cannot use the
+  // status code to probe which ids are real (avoids enumeration via DELETE).
+  if (!record) {
+    return res.status(204).send();
+  }
+  if (!deleteTokenMatches(readDeleteToken(req), record.deleteTokenHash)) {
+    return res.status(403).json({ error: "Invalid or missing deletion token." });
+  }
   await prisma.paste.deleteMany({ where: { shortId: id } });
   return res.status(204).send();
 });
@@ -465,6 +565,7 @@ app.post("/api/files/initiate", fileLimiter, async (req, res) => {
     const shortId = await generateFileId(payload.mode);
     const { r2Key, metadataKey } = buildFileKeys();
     const uploadId = await createMultipartUpload(r2Key, payload.contentType);
+    const { token: deleteToken, hash: deleteTokenHash } = generateDeleteToken();
 
     await prisma.sharedFile.create({
       data: {
@@ -477,6 +578,7 @@ app.post("/api/files/initiate", fileLimiter, async (req, res) => {
         r2Key,
         metadataKey,
         uploadId,
+        deleteTokenHash,
         maxDownloads,
         expiresAt
       }
@@ -487,6 +589,7 @@ app.post("/api/files/initiate", fileLimiter, async (req, res) => {
       uploadId,
       r2Key,
       metadataKey,
+      deleteToken,
       partSize: FILE_UPLOAD_PART_SIZE,
       expiresAt: expiresAt.toISOString()
     });
@@ -576,16 +679,13 @@ app.post("/api/files/complete", fileLimiter, async (req, res) => {
 });
 
 app.post("/api/files/metadata", fileLimiter, async (req, res) => {
-  const parsed = fileMetadataSchema.safeParse(req.body?.metadata);
+  const parsed = fileMetadataRequestSchema.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({ error: "Invalid request." });
   }
-  if (parsed.data.ivs.length !== parsed.data.totalChunks) {
+  const { id, metadata } = parsed.data;
+  if (metadata.ivs.length !== metadata.totalChunks) {
     return res.status(400).json({ error: "Invalid metadata." });
-  }
-  const { id } = req.body as { id?: string };
-  if (!id) {
-    return res.status(400).json({ error: "Invalid request." });
   }
 
   try {
@@ -595,7 +695,7 @@ app.post("/api/files/metadata", fileLimiter, async (req, res) => {
     if (!record) {
       return res.status(404).json({ error: "File not found." });
     }
-    await putMetadataObject(record.metadataKey, parsed.data);
+    await putMetadataObject(record.metadataKey, metadata);
     return res.json({ ok: true });
   } catch (error) {
     console.error("Store metadata failed:", error instanceof Error ? error.message : "unknown error");
@@ -621,6 +721,7 @@ app.post("/api/files/quick", fileLimiter, async (req, res) => {
   let partNumber = 1;
   const fileKey = randomBytes(32);
   const encryptedKey = encryptFileKey(fileKey);
+  const { token: deleteToken, hash: deleteTokenHash } = generateDeleteToken();
   let uploadQueue = Promise.resolve();
   let initPromise: Promise<void> | null = null;
 
@@ -657,6 +758,7 @@ app.post("/api/files/quick", fileLimiter, async (req, res) => {
               r2Key,
               metadataKey,
               uploadId,
+              deleteTokenHash,
               maxDownloads: 1,
               expiresAt
             }
@@ -789,6 +891,7 @@ app.post("/api/files/quick", fileLimiter, async (req, res) => {
 
       return res.status(201).json({
         id: shortId,
+        deleteToken,
         expiresAt: (await prisma.sharedFile.findUnique({ where: { shortId } }))?.expiresAt?.toISOString() ?? null
       });
     } catch (error) {
@@ -812,8 +915,8 @@ app.post("/api/files/quick", fileLimiter, async (req, res) => {
   req.pipe(busboy);
 });
 
-app.get("/api/files/:id", async (req, res) => {
-  const { id } = req.params;
+app.get("/api/files/:id", readLimiter, async (req, res) => {
+  const { id } = req.params as { id: string };
   try {
     const record = await prisma.sharedFile.findUnique({
       where: { shortId: id }
@@ -876,8 +979,8 @@ app.get("/api/files/:id", async (req, res) => {
 });
 
 // HEAD /api/files/:id — check existence without downloading
-app.head("/api/files/:id", async (req, res) => {
-  const { id } = req.params;
+app.head("/api/files/:id", readLimiter, async (req, res) => {
+  const { id } = req.params as { id: string };
   try {
     const record = await prisma.sharedFile.findUnique({
       where: { shortId: id },
@@ -914,8 +1017,8 @@ app.head("/api/files/:id", async (req, res) => {
   }
 });
 
-app.post("/api/files/:id/downloaded", async (req, res) => {
-  const { id } = req.params;
+app.post("/api/files/:id/downloaded", readLimiter, async (req, res) => {
+  const { id } = req.params as { id: string };
   try {
     const updated = await prisma.sharedFile.update({
       where: { shortId: id },
@@ -933,15 +1036,20 @@ app.post("/api/files/:id/downloaded", async (req, res) => {
   }
 });
 
-app.delete("/api/files/:id", async (req, res) => {
-  const { id } = req.params;
+app.delete("/api/files/:id", readLimiter, async (req, res) => {
+  const { id } = req.params as { id: string };
   const record = await prisma.sharedFile.findUnique({
     where: { shortId: id }
   });
-  if (record) {
-    await deleteFileObjects(record.r2Key, record.metadataKey).catch(() => undefined);
-    await prisma.sharedFile.delete({ where: { shortId: id } }).catch(() => undefined);
+  // 204 for a missing row too, so DELETE can't be used to probe valid ids.
+  if (!record) {
+    return res.status(204).send();
   }
+  if (!deleteTokenMatches(readDeleteToken(req), record.deleteTokenHash)) {
+    return res.status(403).json({ error: "Invalid or missing deletion token." });
+  }
+  await deleteFileObjects(record.r2Key, record.metadataKey).catch(() => undefined);
+  await prisma.sharedFile.delete({ where: { shortId: id } }).catch(() => undefined);
   return res.status(204).send();
 });
 

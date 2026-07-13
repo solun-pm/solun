@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Script from "next/script";
+import { headers } from "next/headers";
 import { JetBrains_Mono, Space_Grotesk } from "next/font/google";
 import "./globals.css";
 
@@ -73,12 +74,13 @@ export const metadata: Metadata = {
   publisher: "Solun"
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  const nonce = (await headers()).get("x-nonce") ?? undefined;
   return (
     <html lang="en" className={`${display.variable} ${mono.variable}`}>
       <body className="antialiased">
         {children}
-        <Script id="preload-guard" strategy="afterInteractive">
+        <Script id="preload-guard" strategy="afterInteractive" nonce={nonce}>
           {`
             // Remove preload class after DOM content loaded to enable transitions
             document.body.classList.add('preload');

@@ -111,7 +111,6 @@ export default function FileDownloadClient({
     dispatch({ type: "patch", payload: { loading: true, error: null, status: "loading" } });
 
     try {
-      console.log("[download] start", { id, api: API_URL });
       const response = await fetch(`${API_URL}/api/files/${id}`, { cache: "no-store" });
       if (!response.ok) {
         if (response.status !== 404) {
@@ -122,7 +121,6 @@ export default function FileDownloadClient({
       }
 
       const info = (await response.json()) as DownloadInfo;
-      console.log("[download] info", info);
       dispatch({ type: "patch", payload: { fileInfo: info } });
 
       const keyFromUrl = new URLSearchParams(window.location.hash.slice(1)).get("key");
@@ -132,7 +130,6 @@ export default function FileDownloadClient({
       }
 
       const key = await importKey(keyValue);
-      console.log("[download] key loaded", { mode: info.mode });
 
       const metadataResponse = await fetch(info.metadataUrl, { cache: "no-store" });
       if (!metadataResponse.ok) {
@@ -141,7 +138,6 @@ export default function FileDownloadClient({
       }
 
       const metadata = (await metadataResponse.json()) as FileMetadata;
-      console.log("[download] metadata", metadata);
       setTotals(metadata.totalSize, metadata.totalChunks);
 
       const chunks: BlobPart[] = [];
@@ -156,6 +152,7 @@ export default function FileDownloadClient({
         const end = start + cipherSize - 1;
 
         const chunkResponse = await fetch(info.downloadUrl, {
+          cache: "no-store",
           headers: {
             Range: `bytes=${start}-${end}`
           }
@@ -169,7 +166,6 @@ export default function FileDownloadClient({
           throw new Error("Failed to download chunk.");
         }
 
-        console.log("[download] chunk ok", { index, start, end, size: chunkResponse.headers.get("Content-Length") });
         const encryptedChunk = await chunkResponse.arrayBuffer();
         markDownloaded(index + 1, encryptedChunk.byteLength);
 
@@ -191,11 +187,9 @@ export default function FileDownloadClient({
         link.click();
       }, 0);
       await fetch(`${API_URL}/api/files/${id}/downloaded`, { method: "POST" }).catch(() => undefined);
-      console.log("[download] done", { id });
     } catch (err) {
       const message = err instanceof Error ? err.message : "Failed to load file.";
       setProgressError(message);
-      console.error("[download] error", message);
       dispatch({
         type: "patch",
         payload: { error: message, status: message === "File not found." ? "not-found" : "error" }

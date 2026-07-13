@@ -4,6 +4,18 @@ export const MAX_PASTE_BYTES = 512 * 1024;
 export const MAX_FILE_BYTES = 500 * 1024 * 1024;
 export const FILE_CHUNK_SIZE = 10 * 1024 * 1024;
 
+// Upper bound on multipart pieces: MAX_FILE_BYTES / FILE_CHUNK_SIZE ≈ 50, plus
+// generous headroom. Bounds unbounded arrays so a request can't force huge work.
+export const MAX_FILE_PARTS = 1000;
+
+// A 96-bit GCM nonce base64-encodes to exactly 16 chars; cap generously and
+// restrict to the base64 alphabet so a malformed/oversized IV is rejected.
+const base64IvSchema = z
+  .string()
+  .min(1)
+  .max(24)
+  .regex(/^[A-Za-z0-9+/]+={0,2}$/, "Invalid IV encoding.");
+
 export const pasteModeSchema = z.enum(["quick", "secure"]);
 export const fileModeSchema = z.enum(["quick", "secure"]);
 
@@ -24,7 +36,7 @@ export const createPasteSchema = z
     mode: pasteModeSchema,
     ttl: ttlSchema,
     burnAfterRead: z.boolean().optional(),
-    iv: z.string().optional()
+    iv: base64IvSchema.optional()
   })
   .superRefine((value, context) => {
     if (value.mode === "secure") {
@@ -78,27 +90,35 @@ export const createFileInitSchema = z.object({
 });
 
 export const filePresignSchema = z.object({
-  id: z.string().min(1),
-  uploadId: z.string().min(1),
-  partNumbers: z.array(z.number().int().min(1)).min(1)
+  id: z.string().min(1).max(64),
+  uploadId: z.string().min(1).max(512),
+  partNumbers: z.array(z.number().int().min(1).max(MAX_FILE_PARTS)).min(1).max(MAX_FILE_PARTS)
 });
 
 export const fileCompleteSchema = z.object({
-  id: z.string().min(1),
-  uploadId: z.string().min(1),
-  parts: z.array(
-    z.object({
-      partNumber: z.number().int().min(1),
-      etag: z.string().min(1)
-    })
-  )
+  id: z.string().min(1).max(64),
+  uploadId: z.string().min(1).max(512),
+  parts: z
+    .array(
+      z.object({
+        partNumber: z.number().int().min(1).max(MAX_FILE_PARTS),
+        etag: z.string().min(1).max(256)
+      })
+    )
+    .min(1)
+    .max(MAX_FILE_PARTS)
 });
 
 export const fileMetadataSchema = z.object({
-  chunkSize: z.number().int().positive(),
-  totalSize: z.number().int().positive(),
-  totalChunks: z.number().int().positive(),
-  ivs: z.array(z.string().min(1))
+  chunkSize: z.number().int().positive().max(MAX_FILE_BYTES),
+  totalSize: z.number().int().positive().max(MAX_FILE_BYTES),
+  totalChunks: z.number().int().positive().max(MAX_FILE_PARTS),
+  ivs: z.array(base64IvSchema).min(1).max(MAX_FILE_PARTS)
+});
+
+export const fileMetadataRequestSchema = z.object({
+  id: z.string().min(1).max(64),
+  metadata: fileMetadataSchema
 });
 
 export type FileMode = z.infer<typeof fileModeSchema>;
@@ -108,6 +128,7 @@ export type CreateFileInitInput = z.infer<typeof createFileInitSchema>;
 export type FilePresignInput = z.infer<typeof filePresignSchema>;
 export type FileCompleteInput = z.infer<typeof fileCompleteSchema>;
 export type FileMetadata = z.infer<typeof fileMetadataSchema>;
+export type FileMetadataRequest = z.infer<typeof fileMetadataRequestSchema>;
 
 export type PasteMode = z.infer<typeof pasteModeSchema>;
 export type TtlSeconds = z.infer<typeof ttlSchema>;

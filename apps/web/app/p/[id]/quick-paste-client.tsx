@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import Link from "next/link";
 import type { PasteRecord } from "@solun/shared";
 
@@ -27,7 +27,31 @@ export default function QuickPasteClient({
     setTimeout(() => setCopied(false), 2000);
   }, [data?.content]);
 
-  // On mount: HEAD check – does the message exist? Don't read or delete it yet.
+  // The server could not reach the API: HEAD check from the browser instead.
+  // Don't read or delete the message yet.
+  useEffect(() => {
+    if (state !== "checking") return;
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const response = await fetch(`${API_URL}/api/paste/${id}`, {
+          method: "HEAD",
+          cache: "no-store"
+        });
+        if (cancelled) return;
+        setState(response.ok ? "exists" : "not-found");
+      } catch {
+        if (cancelled) return;
+        setError("Failed to load message. Please check your connection.");
+        setState("error");
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [state, id]);
 
   async function handleReveal() {
     setState("loading");

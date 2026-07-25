@@ -207,6 +207,38 @@ export default function FileDownloadClient({
     };
   }, [state.fileUrl]);
 
+  // The server could not reach the API: HEAD check from the browser instead.
+  useEffect(() => {
+    if (state.status !== "checking") return;
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const response = await fetch(`${API_URL}/api/files/${id}`, {
+          method: "HEAD",
+          cache: "no-store"
+        });
+        if (cancelled) return;
+        dispatch({
+          type: "patch",
+          payload: response.ok
+            ? { availability: "available", status: "exists" }
+            : { availability: "missing", status: "not-found" }
+        });
+      } catch {
+        if (cancelled) return;
+        dispatch({
+          type: "patch",
+          payload: { status: "error", error: "Failed to load file. Please check your connection." }
+        });
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [state.status, id]);
+
   async function handleDownload() {
     if (!state.fileUrl || !state.fileInfo?.originalName) return;
     const link = document.createElement("a");

@@ -1,4 +1,5 @@
 import FileDownloadClient from "./file-client";
+import { probeResource } from "../../../lib/server-api";
 
 export const metadata = {
   robots: {
@@ -7,18 +8,13 @@ export const metadata = {
   }
 };
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001";
-
-async function getInitialAvailability(id: string): Promise<"available" | "missing"> {
-  try {
-    const response = await fetch(`${API_URL}/api/files/${id}`, {
-      method: "HEAD",
-      cache: "no-store"
-    });
-    return response.ok ? "available" : "missing";
-  } catch {
-    return "missing";
-  }
+async function getInitialAvailability(
+  id: string
+): Promise<"available" | "missing" | "checking"> {
+  const result = await probeResource(`/api/files/${id}`);
+  if (result === "exists") return "available";
+  if (result === "not-found") return "missing";
+  return "checking";
 }
 
 export default async function FileDownloadPage(props: { params: Promise<{ id: string }> }) {

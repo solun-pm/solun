@@ -915,6 +915,46 @@ app.post("/api/files/quick", fileLimiter, async (req, res) => {
   req.pipe(busboy);
 });
 
+// HEAD /api/files/:id — check existence without downloading. Must stay above the
+// GET route: Express serves HEAD from the first matching GET handler otherwise.
+app.head("/api/files/:id", readLimiter, async (req, res) => {
+  const { id } = req.params as { id: string };
+  try {
+    const record = await prisma.sharedFile.findUnique({
+      where: { shortId: id },
+      select: {
+        shortId: true,
+        status: true,
+        expiresAt: true,
+        maxDownloads: true,
+        downloadCount: true,
+        r2Key: true,
+        metadataKey: true
+      }
+    });
+
+    if (!record || record.status !== "active") {
+      return res.status(404).end();
+    }
+
+    if (isExpired(record.expiresAt)) {
+      await deleteFileObjects(record.r2Key, record.metadataKey).catch(() => undefined);
+      await prisma.sharedFile.delete({ where: { shortId: id } }).catch(() => undefined);
+      return res.status(404).end();
+    }
+
+    if (record.maxDownloads && record.downloadCount >= record.maxDownloads) {
+      await deleteFileObjects(record.r2Key, record.metadataKey).catch(() => undefined);
+      await prisma.sharedFile.delete({ where: { shortId: id } }).catch(() => undefined);
+      return res.status(404).end();
+    }
+
+    return res.status(200).end();
+  } catch {
+    return res.status(500).end();
+  }
+});
+
 app.get("/api/files/:id", readLimiter, async (req, res) => {
   const { id } = req.params as { id: string };
   try {
@@ -975,45 +1015,6 @@ app.get("/api/files/:id", readLimiter, async (req, res) => {
   } catch (error) {
     console.error("File fetch failed:", error instanceof Error ? error.message : "unknown error");
     return res.status(500).json({ error: "Failed to retrieve file." });
-  }
-});
-
-// HEAD /api/files/:id — check existence without downloading
-app.head("/api/files/:id", readLimiter, async (req, res) => {
-  const { id } = req.params as { id: string };
-  try {
-    const record = await prisma.sharedFile.findUnique({
-      where: { shortId: id },
-      select: {
-        shortId: true,
-        status: true,
-        expiresAt: true,
-        maxDownloads: true,
-        downloadCount: true,
-        r2Key: true,
-        metadataKey: true
-      }
-    });
-
-    if (!record || record.status !== "active") {
-      return res.status(404).end();
-    }
-
-    if (isExpired(record.expiresAt)) {
-      await deleteFileObjects(record.r2Key, record.metadataKey).catch(() => undefined);
-      await prisma.sharedFile.delete({ where: { shortId: id } }).catch(() => undefined);
-      return res.status(404).end();
-    }
-
-    if (record.maxDownloads && record.downloadCount >= record.maxDownloads) {
-      await deleteFileObjects(record.r2Key, record.metadataKey).catch(() => undefined);
-      await prisma.sharedFile.delete({ where: { shortId: id } }).catch(() => undefined);
-      return res.status(404).end();
-    }
-
-    return res.status(200).end();
-  } catch {
-    return res.status(500).end();
   }
 });
 

@@ -1,4 +1,5 @@
 import QuickPasteClient from "./quick-paste-client";
+import { probeResource } from "../../../lib/server-api";
 
 export const metadata = {
   robots: {
@@ -7,18 +8,9 @@ export const metadata = {
   }
 };
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001";
-
-async function getInitialState(id: string): Promise<"exists" | "not-found"> {
-  try {
-    const response = await fetch(`${API_URL}/api/paste/${id}`, {
-      method: "HEAD",
-      cache: "no-store"
-    });
-    return response.ok ? "exists" : "not-found";
-  } catch {
-    return "not-found";
-  }
+async function getInitialState(id: string): Promise<"exists" | "not-found" | "checking"> {
+  const result = await probeResource(`/api/paste/${id}`);
+  return result === "unknown" ? "checking" : result;
 }
 
 export default async function QuickPastePage(props: { params: Promise<{ id: string }> }) {

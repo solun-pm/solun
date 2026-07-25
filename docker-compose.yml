@@ -39,6 +39,8 @@ services:
     restart: unless-stopped
     environment:
       NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:3001}
+      # Used by server components only — stays inside the compose network.
+      API_INTERNAL_URL: ${API_INTERNAL_URL:-http://api:3001}
     ports:
       - "3000:3000"
     depends_on:

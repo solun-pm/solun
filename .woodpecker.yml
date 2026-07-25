@@ -1,0 +1,58 @@
+when:
+  - event: [push, manual]
+
+# Nur die API wird gebaut und ausgerollt.
+#
+# apps/web/Dockerfile baut die Anwendung bewusst erst beim Containerstart
+# ("next build runs at container start so NEXT_PUBLIC_* env vars are available").
+# Das laufende Web-Image ist ein von Hand vorgebauter Snapshot mit start-only
+# CMD. Ein CI-Build wuerde ein funktional anderes Image erzeugen - langsamer
+# Start bei jedem Deploy. Solange das Dockerfile so aussieht, bleibt web aussen vor.
+
+steps:
+  - name: tags
+    image: registry.local.phanes.net/dockerhub/library/node:20-alpine
+    commands:
+      - VERSION=$(node -p "require('./apps/api/package.json').version")
+      - printf '%s\nlatest\n' "$VERSION" > .tags
+      - echo "Tags fuer diesen Build:" && cat .tags
+
+  - name: build-push-api
+    image: woodpeckerci/plugin-docker-buildx:6.1.1
+    settings:
+      registry: registry.local.phanes.net
+      repo: registry.local.phanes.net/solun-pm/solun-api
+      dockerfile: apps/api/Dockerfile
+      platforms: linux/amd64
+      tags_file: .tags
+      username:
+        from_secret: harbor_user
+      password:
+        from_secret: harbor_token
+    depends_on: [tags]
+
+  - name: deploy-tag
+    image: registry.local.phanes.net/dockerhub/alpine/git:latest
+    environment:
+      FORGEJO_USER:
+        from_secret: forgejo_user
+      FORGEJO_TOKEN:
+        from_secret: forgejo_token
+    commands:
+      - VERSION=$(head -1 .tags)
+      - git clone -q "https://$FORGEJO_USER:$FORGEJO_TOKEN@git.local.phanes.net/phanes-io/infra-stacks.git" /tmp/infra
+      - cd /tmp/infra
+      # Muster ohne "image: " - Doppelpunkt mit Leerzeichen wuerde die YAML-Zeile brechen.
+      # Trifft bewusst nur solun-api, nicht solun-web.
+      - sed -i "s#solun-pm/solun-api:[A-Za-z0-9._-]*#solun-pm/solun-api:$VERSION#" solun01/solun/docker-compose.yml
+      - git config user.email "ci-bot@phanes.net"
+      - git config user.name "CI Bot"
+      - |
+        if git diff --quiet; then
+          echo "Tag unveraendert ($VERSION) - kein Commit noetig"
+        else
+          git commit -am "solun: API-Image-Tag auf $VERSION (Pipeline $CI_PIPELINE_NUMBER)"
+          git push origin main
+          echo "Tag $VERSION nach infra-stacks gepusht"
+        fi
+    depends_on: [build-push-api]

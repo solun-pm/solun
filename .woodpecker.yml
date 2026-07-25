@@ -36,8 +36,10 @@ steps:
       dockerfile: apps/web/Dockerfile
       platforms: linux/amd64
       tags_file: .tags
+      # ACHTUNG: build_args ist eine Map. In Listenform ("- KEY=VALUE") macht das
+      # Plugin daraus "--build-arg *=KEY=VALUE" und der Wert kommt nie an.
       build_args:
-        - NEXT_PUBLIC_API_URL=https://api.solun.pm
+        NEXT_PUBLIC_API_URL: https://api.solun.pm
       username:
         from_secret: harbor_user
       password:
@@ -57,7 +59,10 @@ steps:
       - cd /tmp/infra
       # Muster ohne "image: " - Doppelpunkt mit Leerzeichen wuerde die YAML-Zeile brechen
       - sed -i "s#solun-pm/solun-api:[A-Za-z0-9._-]*#solun-pm/solun-api:$VERSION#" solun01/solun/docker-compose.yml
-      - sed -i "s#solun-pm/solun-web:[A-Za-z0-9._-]*#solun-pm/solun-web:$VERSION#" solun01/solun/docker-compose.yml
+      # Web-Tag wird vorerst NICHT automatisch gesetzt: das Image wird gebaut,
+      # aber erst nach manueller Pruefung der einkompilierten NEXT_PUBLIC-Werte
+      # ausgerollt. Zeile wieder aktivieren, sobald ein Build verifiziert ist.
+      # - sed -i "s#solun-pm/solun-web:[A-Za-z0-9._-]*#solun-pm/solun-web:$VERSION#" solun01/solun/docker-compose.yml
       - git config user.email "ci-bot@phanes.net"
       - git config user.name "CI Bot"
       - |

@@ -16,21 +16,21 @@
     "@solun/shared": "workspace:*",
     "clsx": "^2.1.1",
     "geoip-lite": "^2.0.3",
-    "next": "16.2.9",
-    "react": "19.2.7",
-    "react-dom": "19.2.7",
-    "swr": "^2.4.1",
+    "next": "16.2.12",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "swr": "^2.4.2",
     "zod": "^4.4.3"
   },
   "devDependencies": {
-    "@tailwindcss/postcss": "^4.3.1",
+    "@tailwindcss/postcss": "^4.3.3",
     "@types/geoip-lite": "^1.4.4",
-    "@types/node": "^26.0.0",
-    "@types/react": "^19.2.17",
-    "@types/react-dom": "^19.0.2",
-    "autoprefixer": "^10.5.0",
-    "postcss": "^8.5.15",
-    "tailwindcss": "^4.3.1",
-    "typescript": "^6.0.3"
+    "@types/node": "^26.1.2",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.4",
+    "autoprefixer": "^10.5.4",
+    "postcss": "^8.5.25",
+    "tailwindcss": "^4.3.3",
+    "typescript": "^7.0.2"
   }
 }

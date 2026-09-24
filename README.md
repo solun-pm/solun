@@ -16,6 +16,22 @@
 - **Quick pastes** are encrypted at rest and deleted after the first read. The server decrypts on delivery — fast and zero-effort for the sender.
 - **Secure pastes** are end-to-end encrypted in the browser before being sent. The decryption key is embedded in the URL fragment and never transmitted to the server.
 
+### Files from the command line
+
+Quick files can be shared and fetched with plain `curl` — handy for headless servers:
+
+```bash
+# Upload (expiresIn: 1h | 24h | 7d) — the response contains the share "url"
+curl -F expiresIn=24h -F file=@backup.tar.gz https://<api-host>/api/files/quick
+
+# Download on the server: follows the redirect, keeps the original filename
+curl -fLOJ https://solun.pm/f/<id>
+# or: wget --content-disposition https://solun.pm/f/<id>
+```
+
+The download burns the file (Quick files are one-shot), and it counts as used as soon as the transfer starts. `HEAD` requests never burn it.
+Secure files cannot be fetched this way: their key only exists in the link's `#key=` fragment, which the server never sees.
+
 ---
 
 ## Self-hosting with Docker

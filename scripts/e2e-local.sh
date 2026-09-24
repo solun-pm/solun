@@ -130,7 +130,24 @@ expect "HEAD file" "$(curl -s -o /dev/null -w '%{http_code}' -I "$A/api/files/$F
 R=$(curl -s "$A/api/files/$FID")
 expect "file sizeBytes" "$(echo "$R" | json .sizeBytes)" 300000
 expect "presigned download" "$(curl -s -o /dev/null -w '%{http_code}' "$(echo "$R" | json .downloadUrl)")" 200
-expect "SSR /f/<id>" "$(curl -s -o /dev/null -w '%{http_code}' "$W/f/$FID")" 200
+expect "SSR /f/<id>" "$(curl -s -o /dev/null -w '%{http_code}' -A 'Mozilla/5.0' "$W/f/$FID")" 200
+
+log "api: curl download of a quick file"
+head -c 25000000 /dev/urandom > "$WORK/cli.bin"   # > 2 chunks
+R=$(curl -s -X POST "$A/api/files/quick" -F "expiresIn=1h" -F "file=@$WORK/cli.bin;filename=cli test ü.bin")
+CID=$(echo "$R" | json .id)
+expect "upload returns url" "$(echo "$R" | json .url)" "http://localhost:$WEB_PORT/f/$CID"
+expect "curl on /f/<id> redirects" "$(curl -s -o /dev/null -w '%{http_code} %{redirect_url}' "$W/f/$CID")" \
+  "307 http://localhost:$API_PORT/api/files/$CID/raw"
+expect "HEAD raw" "$(curl -s -o /dev/null -w '%{http_code}' -I "$A/api/files/$CID/raw")" 200
+[[ "$(curl -sI "$A/api/files/$CID/raw")" == *"filename*=UTF-8''cli%20test%20%C3%BC.bin"* ]] \
+  && pass "HEAD raw UTF-8 filename (not burned)" || fail "HEAD raw Content-Disposition"
+mkdir -p "$WORK/dl" && (cd "$WORK/dl" && curl -fsSLOJ "$W/f/$CID")
+# curl -J uses the ASCII fallback; browsers and wget read filename*=UTF-8''.
+cmp -s "$WORK/cli.bin" "$WORK/dl/cli test _.bin" && pass "curl -fLOJ plaintext + filename" \
+  || fail "curl -fLOJ: $(ls "$WORK/dl")"
+expect "raw again burned" "$(curl -s -o /dev/null -w '%{http_code}' "$A/api/files/$CID/raw")" 404
+expect "metadata burned too" "$(curl -s -o /dev/null -w '%{http_code}' "$A/api/files/$CID")" 404
 
 log "pages"
 for p in / /learn /roadmap /ip /learn/overview /robots.txt /sitemap.xml /p/doesnotexist; do

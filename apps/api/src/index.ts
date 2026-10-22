@@ -704,7 +704,12 @@ app.post("/api/files/metadata", fileLimiter, async (req, res) => {
 });
 
 app.post("/api/files/quick", fileLimiter, async (req, res) => {
-    const busboy = Busboy({ headers: req.headers, limits: { fileSize: FILE_UPLOAD_MAX_BYTES } });
+  // Browsers and curl send filenames as raw UTF-8; busboy defaults to latin1.
+  const busboy = Busboy({
+    headers: req.headers,
+    defParamCharset: "utf8",
+    limits: { fileSize: FILE_UPLOAD_MAX_BYTES }
+  });
   let expiresIn: string = "24h";
   let uploadId: string | null = null;
   let shortId: string | null = null;
@@ -889,8 +894,10 @@ app.post("/api/files/quick", fileLimiter, async (req, res) => {
         }
       });
 
+      const frontendUrl = env.FRONTEND_URL.replace(/\/+$/, "");
       return res.status(201).json({
         id: shortId,
+        url: `${frontendUrl}/f/${shortId}`,
         deleteToken,
         expiresAt: (await prisma.sharedFile.findUnique({ where: { shortId } }))?.expiresAt?.toISOString() ?? null
       });
@@ -1015,6 +1022,142 @@ app.get("/api/files/:id", readLimiter, async (req, res) => {
   } catch (error) {
     console.error("File fetch failed:", error instanceof Error ? error.message : "unknown error");
     return res.status(500).json({ error: "Failed to retrieve file." });
+  }
+});
+
+function contentDisposition(filename: string): string {
+  const fallback = filename.replace(/[^\x20-\x7e]|["\\]/g, "_") || "file";
+  return `attachment; filename="${fallback}"; filename*=UTF-8''${encodeURIComponent(filename)}`;
+}
+
+// Resolves false when the client went away before the socket drained.
+function waitForDrain(res: express.Response): Promise<boolean> {
+  return new Promise((resolve) => {
+    const onDrain = () => {
+      res.off("close", onClose);
+      resolve(true);
+    };
+    const onClose = () => {
+      res.off("drain", onDrain);
+      resolve(false);
+    };
+    res.once("drain", onDrain);
+    res.once("close", onClose);
+  });
+}
+
+// GET /api/files/:id/raw — plaintext download for CLI clients (curl -fLOJ).
+// Only Quick files qualify: their key is held server-side. Secure files are
+// end-to-end encrypted and the key never reaches us, so they stay browser-only.
+// The download is claimed before streaming starts, so a burn-after-read file is
+// gone even if the transfer is interrupted.
+app.get("/api/files/:id/raw", readLimiter, async (req, res) => {
+  const { id } = req.params as { id: string };
+  const sendText = (status: number, message: string) =>
+    res.status(status).type("text/plain; charset=utf-8").send(`${message}\n`);
+
+  let record;
+  try {
+    record = await prisma.sharedFile.findUnique({ where: { shortId: id } });
+  } catch (error) {
+    console.error("Raw file lookup failed:", error instanceof Error ? error.message : "unknown error");
+    return sendText(500, "Failed to retrieve file.");
+  }
+  if (!record || record.status !== "active") {
+    return sendText(404, "Not found.");
+  }
+  if (
+    isExpired(record.expiresAt) ||
+    (record.maxDownloads && record.downloadCount >= record.maxDownloads)
+  ) {
+    await deleteFileObjects(record.r2Key, record.metadataKey).catch(() => undefined);
+    await prisma.sharedFile.delete({ where: { shortId: id } }).catch(() => undefined);
+    return sendText(404, "Not found.");
+  }
+  if (record.mode !== "quick" || !record.encryptedKey) {
+    return sendText(
+      400,
+      "This is a Secure (end-to-end encrypted) file. The key never reaches the server, so it can only be opened in a browser."
+    );
+  }
+
+  // Express answers HEAD from this GET handler; never let a HEAD burn the file.
+  if (req.method === "HEAD") {
+    res.setHeader("Content-Type", "application/octet-stream");
+    res.setHeader("Content-Length", String(record.sizeBytes));
+    res.setHeader("Content-Disposition", contentDisposition(record.originalName));
+    res.setHeader("Cache-Control", "no-store");
+    return res.status(200).end();
+  }
+
+  let metadata: FileMetadata;
+  let fileKey: Buffer;
+  try {
+    const metadataObject = await r2Client.send(
+      new GetObjectCommand({ Bucket: env.R2_BUCKET, Key: record.metadataKey })
+    );
+    metadata = JSON.parse(await metadataObject.Body!.transformToString()) as FileMetadata;
+    fileKey = decryptFileKey(record.encryptedKey);
+  } catch (error) {
+    console.error("Raw file metadata failed:", error instanceof Error ? error.message : "unknown error");
+    return sendText(500, "Failed to retrieve file.");
+  }
+
+  // Claim the download atomically: only the request that moves downloadCount
+  // from the value we read wins, so two parallel curls can't both get the file.
+  const claimed = await prisma.sharedFile
+    .updateMany({
+      where: { shortId: id, status: "active", downloadCount: record.downloadCount },
+      data: { downloadCount: { increment: 1 } }
+    })
+    .catch(() => ({ count: 0 }));
+  if (claimed.count !== 1) {
+    return sendText(404, "Not found.");
+  }
+  const burn =
+    record.maxDownloads !== null && record.downloadCount + 1 >= record.maxDownloads;
+
+  res.status(200);
+  res.setHeader("Content-Type", "application/octet-stream");
+  res.setHeader("Content-Length", String(metadata.totalSize));
+  res.setHeader("Content-Disposition", contentDisposition(record.originalName));
+  res.setHeader("Cache-Control", "no-store");
+
+  const authTagBytes = 16;
+  try {
+    for (let index = 0; index < metadata.totalChunks; index += 1) {
+      const isLast = index === metadata.totalChunks - 1;
+      const plainSize = isLast
+        ? metadata.totalSize - (metadata.totalChunks - 1) * metadata.chunkSize
+        : metadata.chunkSize;
+      const start = index * (metadata.chunkSize + authTagBytes);
+      const end = start + plainSize + authTagBytes - 1;
+
+      const chunkObject = await r2Client.send(
+        new GetObjectCommand({ Bucket: env.R2_BUCKET, Key: record.r2Key, Range: `bytes=${start}-${end}` })
+      );
+      const encrypted = Buffer.from(await chunkObject.Body!.transformToByteArray());
+      const decipher = createDecipheriv("aes-256-gcm", fileKey, Buffer.from(metadata.ivs[index], "base64"));
+      decipher.setAuthTag(encrypted.subarray(encrypted.length - authTagBytes));
+      const plain = Buffer.concat([
+        decipher.update(encrypted.subarray(0, encrypted.length - authTagBytes)),
+        decipher.final()
+      ]);
+
+      if (res.destroyed) break;
+      if (!res.write(plain) && !(await waitForDrain(res))) break;
+    }
+    res.end();
+  } catch (error) {
+    console.error("Raw file stream failed:", error instanceof Error ? error.message : "unknown error");
+    // Headers are already out; tearing down the socket makes curl report a
+    // truncated transfer instead of silently saving a partial file.
+    res.destroy();
+  } finally {
+    if (burn) {
+      await deleteFileObjects(record.r2Key, record.metadataKey).catch(() => undefined);
+      await prisma.sharedFile.delete({ where: { shortId: id } }).catch(() => undefined);
+    }
   }
 });
 

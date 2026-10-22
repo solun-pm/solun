@@ -3,6 +3,7 @@ import type { NextRequest } from "next/server";
 
 const CLI_PATTERN =
   /^(curl|Wget|HTTPie|httpie|fetch|libcurl|python-requests|Go-http-client|PowerShell|aria2)/i;
+const DOWNLOAD_CLI_PATTERN = /^(curl|Wget)\//i;
 
 function generateNonce(): string {
   const bytes = new Uint8Array(16);
@@ -118,6 +119,23 @@ function getIpFromRequest(request: NextRequest): string {
 }
 
 export function middleware(request: NextRequest) {
+  // Send curl/wget on a file link straight to the plaintext download, so
+  // `curl -fLOJ https://solun.pm/f/<id>` works on a headless server. Limited to
+  // tools a human types: generic HTTP libraries are what link-preview bots use,
+  // and following this redirect burns a Quick file.
+  const fileMatch = request.nextUrl.pathname.match(/^\/f\/([A-Za-z0-9]+)\/?$/);
+  if (fileMatch && DOWNLOAD_CLI_PATTERN.test(request.headers.get("user-agent") ?? "")) {
+    const apiUrl =
+      process.env.NEXT_PUBLIC_API_URL ??
+      (process.env.NODE_ENV !== "production" ? "http://localhost:3001" : undefined);
+    if (apiUrl) {
+      return NextResponse.redirect(
+        `${apiUrl.replace(/\/+$/, "")}/api/files/${fileMatch[1]}/raw`,
+        307,
+      );
+    }
+  }
+
   // Return plain-text IP directly for CLI clients hitting /ip
   if (request.nextUrl.pathname === "/ip") {
     const ua = request.headers.get("user-agent") ?? "";

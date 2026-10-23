@@ -96,6 +96,14 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             }
           `}
         </Script>
+      <Script
+          src="https://rybbit.scpx.de/api/script.js"
+          data-site-id="13"
+          data-skip-patterns={"[\"/api/**\", \"/auth/**\", \"/callback/**\", \"/verify/**\", \"/reset-password/**\", \"/p/**\", \"/s/**\", \"/f/**\"]"}
+          data-mask-patterns={"[\"/domains/*/**\", \"/customers/*/**\", \"/tickets/*/**\", \"/servers/*/**\", \"/users/*/**\"]"}
+          strategy="afterInteractive"
+          nonce={nonce}
+        />
       </body>
     </html>
   );

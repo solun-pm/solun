@@ -28,7 +28,7 @@ function applyStaticSecurityHeaders(headers: Headers): void {
 }
 
 function buildCsp(nonce: string): string {
-  const connectSources = new Set<string>(["'self'"]);
+  const connectSources = new Set<string>(["'self'", "https://rybbit.scpx.de"]);
 
   const apiUrl = process.env.NEXT_PUBLIC_API_URL;
   if (apiUrl) {

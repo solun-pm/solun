@@ -15,7 +15,9 @@
     "release:major": "node scripts/release.mjs major",
     "release:patch:dev": "node scripts/release.mjs patch --dev",
     "release:minor:dev": "node scripts/release.mjs minor --dev",
-    "release:major:dev": "node scripts/release.mjs major --dev"
+    "release:major:dev": "node scripts/release.mjs major --dev",
+    "test:layout": "node scripts/e2e-layout.mjs",
+    "test:ip": "node --experimental-strip-types scripts/test-ip.mts"
   },
   "devDependencies": {
     "react-doctor": "latest",

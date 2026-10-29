@@ -1,15 +1,20 @@
 import type { Lookup } from "geoip-lite";
 
+function normalizeIp(ip: string): string {
+  // Node can represent an IPv4 socket as ::ffff:192.0.2.1. It is still IPv4.
+  return ip.trim().replace(/^::ffff:(\d{1,3}(?:\.\d{1,3}){3})$/i, "$1");
+}
+
 export function getIpFromHeaders(headersList: Headers): string {
   const forwarded = headersList.get("x-forwarded-for");
   if (forwarded) {
-    return forwarded.split(",")[0]!.trim();
+    return normalizeIp(forwarded.split(",")[0]!);
   }
-  return headersList.get("x-real-ip") ?? "unknown";
+  return normalizeIp(headersList.get("x-real-ip") ?? "unknown");
 }
 
 export function getIpVersion(ip: string): 4 | 6 {
-  return ip.includes(":") ? 6 : 4;
+  return normalizeIp(ip).includes(":") ? 6 : 4;
 }
 
 export interface GeoResult {

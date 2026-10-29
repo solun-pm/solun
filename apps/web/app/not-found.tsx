@@ -2,8 +2,8 @@ import Link from "next/link";
 
 export default function NotFound() {
   return (
-    <main className="flex min-h-screen items-center justify-center px-4 py-10">
-      <div className="w-full max-w-3xl space-y-6 rounded-3xl border border-ink-700 bg-ink-800/70 p-8 shadow-glow backdrop-blur">
+    <main className="flex min-h-screen items-center justify-center px-4 py-6 sm:py-10">
+      <div className="w-full max-w-3xl space-y-6 rounded-3xl border border-ink-700 bg-ink-800/70 p-5 shadow-glow sm:p-8 backdrop-blur">
         <header className="space-y-2">
           <p className="text-xs uppercase tracking-[0.4em] text-tide-300/70">Solun</p>
           <h1 className="text-3xl font-semibold text-ink-100">Message not found</h1>

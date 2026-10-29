@@ -43,11 +43,13 @@ export default function ShareSwitch({
           <button
             key={tab.kind}
             type="button"
+            id={tab.kind === "text" ? "message-tab" : "file-tab"}
+            aria-controls={tab.kind === "text" ? "message-panel" : "file-panel"}
             role="tab"
             aria-selected={active}
             onClick={() => onChange(tab.kind)}
             className={clsx(
-              "flex items-center gap-3 rounded-2xl border px-5 py-3.5 text-left transition-all duration-200",
+              "flex items-center gap-2 rounded-2xl border px-3 py-3.5 sm:gap-3 sm:px-5 text-left transition-all duration-200",
               active
                 ? "border-tide-500/60 bg-tide-500/10 text-tide-200"
                 : "border-ink-700 bg-ink-900/40 text-ink-200 hover:border-ink-600 hover:text-ink-100"
@@ -56,7 +58,7 @@ export default function ShareSwitch({
             <span className={clsx("shrink-0 transition-colors", active ? "text-tide-400" : "text-ink-400")}>
               {tab.icon}
             </span>
-            <span>
+            <span className="min-w-0">
               <span className="block text-sm font-semibold leading-tight">{tab.label}</span>
               <span className="block text-xs text-ink-400 leading-tight mt-0.5">{tab.description}</span>
             </span>

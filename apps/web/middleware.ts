@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
+import { getIpFromHeaders, getIpVersion } from "./lib/ip";
 
 const CLI_PATTERN =
   /^(curl|Wget|HTTPie|httpie|fetch|libcurl|python-requests|Go-http-client|PowerShell|aria2)/i;
@@ -110,14 +111,6 @@ function buildCsp(nonce: string): string {
   return csp;
 }
 
-function getIpFromRequest(request: NextRequest): string {
-  const forwarded = request.headers.get("x-forwarded-for");
-  if (forwarded) {
-    return forwarded.split(",")[0]!.trim();
-  }
-  return request.headers.get("x-real-ip") ?? "unknown";
-}
-
 export function middleware(request: NextRequest) {
   // Send curl/wget on a file link straight to the plaintext download, so
   // `curl -fLOJ https://solun.pm/f/<id>` works on a headless server. Limited to
@@ -140,12 +133,13 @@ export function middleware(request: NextRequest) {
   if (request.nextUrl.pathname === "/ip") {
     const ua = request.headers.get("user-agent") ?? "";
     if (CLI_PATTERN.test(ua)) {
-      const ip = getIpFromRequest(request);
-      const version = ip.includes(":") ? 6 : 4;
+      const ip = getIpFromHeaders(request.headers);
+      const version = getIpVersion(ip);
       const body = `${ip}\n`;
       return new NextResponse(body, {
         headers: {
           "Content-Type": "text/plain; charset=utf-8",
+          "Cache-Control": "no-store",
           "X-IP-Version": `IPv${version}`,
         },
       });

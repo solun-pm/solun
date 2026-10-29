@@ -183,3 +183,14 @@ Pushing a tag triggers the publish workflow which builds and pushes the Docker i
 ## License
 
 [MIT](./LICENSE)
+
+### Layout and IP regression checks
+
+With a built web server running locally, Chromium installed, and the existing `playwright-core` dependency available:
+
+```bash
+pnpm test:ip
+WEB_URL=http://127.0.0.1:4280 pnpm test:layout
+```
+
+The browser check covers real footer navigation, both share tabs, generated-link spacing, pages at 320/390/768/1440 pixels, layout before JavaScript, and IPv6 success, incorrect-family responses and connection timeouts. Paste creation and IP probes are mocked; this check does not create production shares. The existing local end-to-end suite covers real isolated paste/file encryption and download flows.

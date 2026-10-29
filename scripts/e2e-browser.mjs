@@ -65,6 +65,28 @@ try {
     await d.saveAs(target);
     const sha = (f) => createHash("sha256").update(readFileSync(f)).digest("hex");
     check("file: downloaded file matches original (sha256)", sha(target) === sha(ORIGINAL));
+
+    // Exercise both upload panels through the actual UI, then verify bytes.
+    for (const mode of ["quick", "secure"]) {
+      await page.goto(W + "/", { waitUntil: "networkidle" });
+      await page.getByRole("tab", { name: /File/ }).click();
+      if (mode === "secure") await page.getByRole("button", { name: "Secure", exact: true }).click();
+      await page.locator('input[type="file"]').setInputFiles(ORIGINAL);
+      await page.getByRole("button", { name: "Upload", exact: true }).click();
+      const link = page.locator("code").filter({ hasText: W + "/f/" });
+      await link.waitFor({ timeout: 30000 });
+      const url = (await link.textContent()).trim();
+      check(`${mode} file: link created by upload UI`, mode === "secure" ? url.includes("#key=") : /\/f\/\w+$/.test(url));
+      await page.goto(url, { waitUntil: "networkidle" });
+      await page.getByRole("button", { name: /load file/i }).click();
+      await page.getByText(/^Ready\.$/).waitFor({ timeout: 30000 });
+      const pending = page.waitForEvent("download", { timeout: 15000 });
+      await page.getByRole("button", { name: /download/i }).first().click();
+      const uploadDownload = await pending;
+      const uploadedTarget = ORIGINAL + "." + mode + ".downloaded";
+      await uploadDownload.saveAs(uploadedTarget);
+      check(`${mode} file: UI upload/download matches original (sha256)`, sha(uploadedTarget) === sha(ORIGINAL));
+    }
   } else {
     check("file: FILE_ID/ORIGINAL_FILE provided", false);
   }

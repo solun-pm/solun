@@ -20,6 +20,7 @@ function corsHeaders(request: NextRequest): Record<string, string> {
       "Access-Control-Allow-Origin": origin,
       "Access-Control-Allow-Methods": "GET, OPTIONS",
       "Access-Control-Allow-Headers": "Content-Type",
+      "Vary": "Origin",
     };
   }
   return {};
@@ -43,7 +44,7 @@ export async function GET(request: NextRequest) {
     CLI_PATTERN.test(ua) ||
     request.nextUrl.searchParams.get("format") === "text";
 
-  const cors = corsHeaders(request);
+  const cors = { ...corsHeaders(request), "Cache-Control": "no-store" };
 
   if (wantsText) {
     return new NextResponse(formatPlainText(ip, version, geo), {

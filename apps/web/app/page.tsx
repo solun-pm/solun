@@ -4,7 +4,7 @@ import clsx from "clsx";
 import Image from "next/image";
 import Link from "next/link";
 import Script from "next/script";
-import { useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import type { FileExpiration, FileMetadata, FileMode, PasteMode } from "@solun/shared";
 import { FILE_CHUNK_SIZE, MAX_FILE_BYTES, MAX_PASTE_BYTES } from "@solun/shared";
 import { encrypt, exportKey, generateKey, importKey } from "../lib/crypto";
@@ -274,40 +274,6 @@ function useResumeTracker({
     }
     setResumeState(loadResumeState(file));
   }, [file, shareKind, fileMode, setResumeState]);
-}
-
-function useSharePanelHeight({
-  shareKind,
-  textPanelRef,
-  filesPanelRef,
-  deps
-}: {
-  shareKind: ShareKind;
-  textPanelRef: React.RefObject<HTMLDivElement | null>;
-  filesPanelRef: React.RefObject<HTMLDivElement | null>;
-  deps: unknown[];
-}) {
-  const [height, setHeight] = useState<number | null>(null);
-
-  useLayoutEffect(() => {
-    const panel = shareKind === "text" ? textPanelRef.current : filesPanelRef.current;
-    if (!panel) return;
-    const next = panel.scrollHeight || panel.getBoundingClientRect().height;
-    setHeight(next);
-  }, [shareKind, textPanelRef, filesPanelRef, ...deps]);
-
-  useLayoutEffect(() => {
-    const panel = shareKind === "text" ? textPanelRef.current : filesPanelRef.current;
-    if (!panel || typeof ResizeObserver === "undefined") return;
-    const observer = new ResizeObserver(() => {
-      const next = panel.scrollHeight || panel.getBoundingClientRect().height;
-      setHeight(next);
-    });
-    observer.observe(panel);
-    return () => observer.disconnect();
-  }, [shareKind, textPanelRef, filesPanelRef]);
-
-  return height;
 }
 
 async function createPaste({
@@ -671,16 +637,16 @@ export default function HomePage() {
   const setFile = (next: File | null) => dispatchFile({ type: "patch", payload: { file: next } });
   const setFileError = (next: string | null) => dispatchFile({ type: "patch", payload: { error: next } });
   const setFileResult = (next: FileResult) => dispatchFile({ type: "patch", payload: { result: next } });
-  const setResumeState = (next: ResumeState | null) =>
-    dispatchFile({ type: "patch", payload: { resumeState: next } });
+  // Keep the effect callback stable: changing it on every render caused an
+  // endless state-update loop that also prevented client-side navigation.
+  const setResumeState = useCallback((next: ResumeState | null) =>
+    dispatchFile({ type: "patch", payload: { resumeState: next } }), []);
   const setFileCopied = (next: boolean) => dispatchFile({ type: "patch", payload: { copied: next } });
   const setFileLinkToast = (next: boolean) =>
     dispatchFile({ type: "patch", payload: { linkToast: next } });
 
   const bytes = useMemo(() => getByteLength(content), [content]);
   const fileChunks = useMemo(() => (file ? Math.ceil(file.size / FILE_CHUNK_SIZE) : 0), [file]);
-  const textPanelRef = useRef<HTMLDivElement | null>(null);
-  const filesPanelRef = useRef<HTMLDivElement | null>(null);
 
   const jsonLd = [
     {
@@ -733,7 +699,7 @@ export default function HomePage() {
         "Burn-after-read",
         "Automatic expiration",
         "Secure file sharing up to 500MB",
-        "No tracking or analytics",
+        "Private share links excluded from analytics",
         "Open source"
       ]
     }
@@ -766,13 +732,6 @@ export default function HomePage() {
 
   const isUploadBusy =
     progress.status === "encrypting" || progress.status === "uploading" || progress.status === "finalizing";
-
-  const panelHeight = useSharePanelHeight({
-    shareKind,
-    textPanelRef,
-    filesPanelRef,
-    deps: [content, bytes, file, fileChunks, result, fileResult, error, fileError, progress.status]
-  });
 
   useResumeTracker({ file, shareKind, fileMode, setResumeState });
   useAutoReset(copied, () => setCopied(false), 2500);
@@ -859,9 +818,6 @@ export default function HomePage() {
     <HomeLayout
       shareKind={shareKind}
       onShareKindChange={setShareKind}
-      panelHeight={panelHeight}
-      textPanelRef={textPanelRef}
-      filesPanelRef={filesPanelRef}
       paste={{
         mode,
         content,
@@ -917,9 +873,6 @@ export default function HomePage() {
 type HomeLayoutProps = {
   shareKind: ShareKind;
   onShareKindChange: (kind: ShareKind) => void;
-  panelHeight: number | null;
-  textPanelRef: React.RefObject<HTMLDivElement | null>;
-  filesPanelRef: React.RefObject<HTMLDivElement | null>;
   paste: {
     mode: PasteMode;
     content: string;
@@ -961,16 +914,13 @@ type HomeLayoutProps = {
 function HomeLayout({
   shareKind,
   onShareKindChange,
-  panelHeight,
-  textPanelRef,
-  filesPanelRef,
   paste,
   file,
   toasts,
   jsonLd
 }: HomeLayoutProps) {
   return (
-    <main className="flex min-h-screen items-center justify-center px-4 py-10">
+    <main className="flex min-h-screen items-center justify-center px-4 py-6 sm:py-10">
       <div
         className={clsx(
           "pointer-events-none fixed bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-full border border-tide-400/30 bg-ink-800/90 px-5 py-2.5 text-sm text-tide-300 shadow-glow-sm backdrop-blur transition-all duration-300",
@@ -1007,7 +957,7 @@ function HomeLayout({
         Link created
       </div>
 
-      <div className="w-full max-w-3xl space-y-6 rounded-3xl border border-ink-700 bg-ink-800/70 p-8 shadow-glow backdrop-blur">
+      <div className="w-full max-w-3xl space-y-6 rounded-3xl border border-ink-700 bg-ink-800/70 p-5 shadow-glow sm:p-8 backdrop-blur">
         <header className="flex items-start gap-4">
           <Image
             src="/logo.svg"
@@ -1026,18 +976,13 @@ function HomeLayout({
         </header>
         <ShareSwitch value={shareKind} onChange={onShareKindChange} />
 
-        <div
-          className="relative transition-[height] duration-700 ease-[cubic-bezier(0.16,0.84,0.44,1)] will-change-[height]"
-          style={panelHeight ? { height: `${panelHeight}px` } : undefined}
-        >
+        <div>
           <section
-            ref={textPanelRef}
-            className={clsx(
-              "absolute inset-x-0 top-0 space-y-4 transition-[opacity,transform] duration-500 ease-[cubic-bezier(0.16,0.84,0.44,1)]",
-              shareKind === "text"
-                ? "opacity-100 translate-y-0 pointer-events-auto"
-                : "opacity-0 translate-y-1 pointer-events-none"
-            )}
+            id="message-panel"
+            role="tabpanel"
+            aria-labelledby="message-tab"
+            hidden={shareKind !== "text"}
+            className="space-y-4"
           >
             <TextSharePanel
               mode={paste.mode}
@@ -1055,13 +1000,11 @@ function HomeLayout({
           </section>
 
           <section
-            ref={filesPanelRef}
-            className={clsx(
-              "absolute inset-x-0 top-0 space-y-4 transition-[opacity,transform] duration-500 ease-[cubic-bezier(0.16,0.84,0.44,1)]",
-              shareKind === "files"
-                ? "opacity-100 translate-y-0 pointer-events-auto"
-                : "opacity-0 translate-y-1 pointer-events-none"
-            )}
+            id="file-panel"
+            role="tabpanel"
+            aria-labelledby="file-tab"
+            hidden={shareKind !== "files"}
+            className="space-y-4"
           >
             <FileSharePanel
               fileMode={file.fileMode}
@@ -1082,21 +1025,21 @@ function HomeLayout({
           </section>
         </div>
 
-        <div className="relative z-10 flex flex-wrap items-center justify-between gap-3 border-t border-ink-700 pt-6 text-xs text-ink-200/70">
+        <footer className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2 border-t border-ink-700 pt-5 text-xs text-ink-200/70">
           <span>Made with love by the Solun team</span>
-          <div className="flex items-center gap-4">
-            <Link href="/learn" className="text-tide-300 hover:text-tide-200 transition">
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+            <Link href="/learn" className="inline-flex min-h-11 items-center text-tide-300 hover:text-tide-200 transition">
               Learn
             </Link>
-            <Link href="/roadmap" className="text-tide-300 hover:text-tide-200 transition">
+            <Link href="/roadmap" className="inline-flex min-h-11 items-center text-tide-300 hover:text-tide-200 transition">
               Roadmap
             </Link>
-            <Link href="/ip" className="text-tide-300 hover:text-tide-200 transition">
+            <Link href="/ip" className="inline-flex min-h-11 items-center text-tide-300 hover:text-tide-200 transition">
               IP
             </Link>
             <a
               href="https://github.com/solun-pm/solun"
-              className="inline-flex items-center gap-2 text-tide-300 hover:text-tide-200 transition"
+              className="inline-flex min-h-11 min-w-11 items-center justify-center text-tide-300 hover:text-tide-200 transition"
               target="_blank"
               rel="noreferrer"
               aria-label="Solun on GitHub"
@@ -1113,7 +1056,7 @@ function HomeLayout({
               </svg>
             </a>
           </div>
-        </div>
+        </footer>
       </div>
       <Script id="home-jsonld" type="application/ld+json">
         {JSON.stringify(jsonLd)}

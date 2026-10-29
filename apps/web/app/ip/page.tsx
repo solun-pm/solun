@@ -40,8 +40,8 @@ export default async function IpPage() {
   };
 
   return (
-    <main className="flex min-h-screen items-center justify-center px-4 py-10">
-      <div className="w-full max-w-2xl space-y-8 rounded-3xl border border-ink-700 bg-ink-800/70 p-8 shadow-glow backdrop-blur">
+    <main className="flex min-h-screen items-center justify-center px-4 py-6 sm:py-10">
+      <div className="w-full max-w-2xl space-y-8 rounded-3xl border border-ink-700 bg-ink-800/70 p-5 shadow-glow sm:p-8 backdrop-blur">
         <header className="space-y-2">
           <p className="text-xs uppercase tracking-[0.4em] text-tide-300/70">
             Solun · IP Lookup
@@ -50,21 +50,21 @@ export default async function IpPage() {
             Your IP Address
           </h1>
           <p className="text-sm text-ink-200">
-            These are the addresses your device used to connect. All lookups
-            are local — nothing leaves the server.
+            Check the public addresses your device uses to connect. Location
+            estimates come from a local database; no external lookup service is used.
           </p>
         </header>
 
         <DualStack serverIp={{ ip, version, geo }} />
 
-        <section className="space-y-4 rounded-2xl border border-ink-700 bg-ink-900/60 p-6">
+        <section className="space-y-4 rounded-2xl border border-ink-700 bg-ink-900/60 p-4 sm:p-6">
           <h2 className="text-sm uppercase tracking-[0.3em] text-tide-300/80">
             Terminal
           </h2>
           <p className="text-sm text-ink-200">
             You can also check your IP from the command line:
           </p>
-          <pre className="rounded-xl bg-ink-950 px-4 py-3 font-mono text-sm text-tide-300 select-all">
+          <pre className="max-w-full overflow-x-auto rounded-xl bg-ink-950 px-4 py-3 font-mono text-sm text-tide-300 select-all">
 curl https://solun.pm/ip
           </pre>
         </section>

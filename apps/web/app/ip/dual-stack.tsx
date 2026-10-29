@@ -16,11 +16,12 @@ interface DualStackState {
   v6Loading: boolean;
 }
 
-async function fetchStack(url: string): Promise<StackEntry | null> {
+async function fetchStack(url: string, version: 4 | 6, signal: AbortSignal): Promise<StackEntry | null> {
   try {
-    const res = await fetch(url, { cache: "no-store" });
+    const res = await fetch(url, { cache: "no-store", signal });
     if (!res.ok) return null;
     const data = await res.json();
+    if (data.version !== version || typeof data.ip !== "string" || !data.ip) return null;
     return {
       ip: data.ip,
       version: data.version,
@@ -50,12 +51,12 @@ function IpCard({
 }) {
   if (loading) {
     return (
-      <section className="space-y-4 rounded-2xl border border-ink-700 bg-ink-900/60 p-6">
+      <section aria-busy="true" className="space-y-4 rounded-2xl border border-ink-700 bg-ink-900/60 p-4 sm:p-6">
         <h2 className="text-sm uppercase tracking-[0.3em] text-tide-300/80">
           {label}
         </h2>
         <div className="flex items-center gap-3">
-          <div className="h-7 w-48 animate-pulse rounded-lg bg-ink-700" />
+          <div className="h-7 w-48 max-w-full animate-pulse rounded-lg bg-ink-700" />
         </div>
       </section>
     );
@@ -63,25 +64,25 @@ function IpCard({
 
   if (!entry) {
     return (
-      <section className="space-y-4 rounded-2xl border border-ink-700 bg-ink-900/60 p-6">
+      <section className="space-y-4 rounded-2xl border border-ink-700 bg-ink-900/60 p-4 sm:p-6">
         <h2 className="text-sm uppercase tracking-[0.3em] text-tide-300/80">
           {label}
         </h2>
-        <p className="text-sm text-ink-400">Nicht verfügbar</p>
+        <p className="text-sm text-ink-400">Not available on this connection.</p>
       </section>
     );
   }
 
   return (
-    <section className="space-y-4 rounded-2xl border border-ink-700 bg-ink-900/60 p-6">
+    <section className="space-y-4 rounded-2xl border border-ink-700 bg-ink-900/60 p-4 sm:p-6">
       <h2 className="text-sm uppercase tracking-[0.3em] text-tide-300/80">
         {label}
       </h2>
-      <div className="flex items-center gap-3">
-        <span className="break-all font-mono text-2xl font-semibold text-ink-100">
+      <div className="flex flex-wrap items-center gap-3">
+        <span className="min-w-0 break-all font-mono text-xl font-semibold text-ink-100 sm:text-2xl">
           {entry.ip}
         </span>
-        <span className="rounded-full bg-tide-300/15 px-2.5 py-0.5 text-xs font-medium text-tide-300">
+        <span className="shrink-0 rounded-full bg-tide-300/15 px-2.5 py-0.5 text-xs font-medium text-tide-300">
           IPv{entry.version}
         </span>
       </div>
@@ -96,7 +97,7 @@ function IpCard({
           ].map((row) => (
             <div key={row.label}>
               <dt className="text-ink-400">{row.label}</dt>
-              <dd className="font-medium text-ink-100">{row.value}</dd>
+              <dd className="break-words font-medium text-ink-100">{row.value}</dd>
             </div>
           ))}
         </dl>
@@ -129,18 +130,23 @@ export default function DualStack({
   });
 
   useEffect(() => {
-    // Fetch the missing stack from the dedicated subdomain
-    if (serverIp.version === 4) {
-      // We already have v4, fetch v6
-      fetchStack("https://v6.solun.pm/api/ip").then((entry) =>
-        setState((s) => ({ ...s, v6: entry, v6Loading: false })),
-      );
-    } else {
-      // We already have v6, fetch v4
-      fetchStack("https://v4.solun.pm/api/ip").then((entry) =>
-        setState((s) => ({ ...s, v4: entry, v4Loading: false })),
-      );
-    }
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 6000);
+    const missingVersion = serverIp.version === 4 ? 6 : 4;
+    let active = true;
+    fetchStack(`https://v${missingVersion}.solun.pm/api/ip`, missingVersion, controller.signal)
+      .then((entry) => {
+        if (!active) return;
+        setState((s) => missingVersion === 6
+          ? { ...s, v6: entry, v6Loading: false }
+          : { ...s, v4: entry, v4Loading: false });
+      })
+      .finally(() => window.clearTimeout(timeout));
+    return () => {
+      active = false;
+      window.clearTimeout(timeout);
+      controller.abort();
+    };
   }, [serverIp.version]);
 
   return (

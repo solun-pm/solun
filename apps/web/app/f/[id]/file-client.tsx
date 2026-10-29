@@ -252,7 +252,7 @@ export default function FileDownloadClient({
 
   return (
     <main className="flex min-h-screen items-start justify-center px-4 pt-10 pb-6">
-      <div className="w-full max-w-2xl space-y-6 rounded-3xl border border-ink-700 bg-ink-800/70 p-8 shadow-glow backdrop-blur">
+      <div className="w-full max-w-2xl space-y-6 rounded-3xl border border-ink-700 bg-ink-800/70 p-5 shadow-glow sm:p-8 backdrop-blur">
         <header className="space-y-2">
           <p className="text-xs uppercase tracking-[0.4em] text-tide-300/70">Solun · File</p>
           <h1 className="text-3xl font-semibold tracking-tight text-ink-100">

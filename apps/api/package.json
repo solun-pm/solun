@@ -16,18 +16,18 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@aws-sdk/client-s3": "^3.1156.0",
-    "@aws-sdk/s3-request-presigner": "^3.1156.0",
+    "@aws-sdk/client-s3": "^3.1160.0",
+    "@aws-sdk/s3-request-presigner": "^3.1160.0",
     "@prisma/adapter-pg": "^7.10.1",
     "@prisma/client": "^7.10.1",
     "@solun/shared": "workspace:*",
     "busboy": "^1.6.0",
     "cors": "^2.8.6",
-    "dotenv": "^17.4.2",
+    "dotenv": "^18.0.9",
     "express": "^5.3.0",
-    "express-rate-limit": "^8.7.1",
+    "express-rate-limit": "^8.7.2",
     "helmet": "^8.3.0",
-    "nanoid": "^5.1.16",
+    "nanoid": "^6.0.2",
     "node-cron": "^4.6.0",
     "zod": "^4.6.7"
   },
@@ -35,9 +35,9 @@
     "@types/busboy": "^1.5.5",
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",
-    "@types/node": "^26.6.5",
+    "@types/node": "^26.6.6",
     "prisma": "^7.10.1",
     "tsx": "^4.23.15",
-    "typescript": "^6.0.3"
+    "typescript": "^7.0.2"
   }
 }

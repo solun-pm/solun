@@ -80,6 +80,9 @@ export default async function RootLayout({ children }: { children: React.ReactNo
     <html lang="en" className={`${display.variable} ${mono.variable}`}>
       <body className="antialiased">
         {children}
+        <footer className="mx-auto max-w-6xl px-6 py-5 text-xs text-ink-200/70">
+          VAT ID / USt-IdNr.: DE466225341 · <a href="https://scpx.de/impressum" className="text-tide-300 underline underline-offset-4">Legal notice / Impressum</a>
+        </footer>
         <Script id="preload-guard" strategy="afterInteractive" nonce={nonce}>
           {`
             // Remove preload class after DOM content loaded to enable transitions
